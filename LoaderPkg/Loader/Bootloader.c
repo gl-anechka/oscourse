@@ -113,7 +113,27 @@ InitGraphics (
   //
   // Hint: Use QueryMode/SetMode functions.
   //
+    UINT32 ModeIndex;
+    UINT32 MaxResolution = 0;
+    UINT32 BestMode = 0;
 
+    for (ModeIndex = 0; ModeIndex < GraphicsOutput->Mode->MaxMode; ModeIndex++) {
+      EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
+      UINTN SizeOfInfo;
+
+      Status = GraphicsOutput->QueryMode(GraphicsOutput, ModeIndex, &SizeOfInfo, &Info);
+      if (EFI_ERROR(Status)) {
+        continue;
+      }
+
+      UINT32 Resolution = Info->HorizontalResolution * Info->VerticalResolution;
+      if (Resolution > MaxResolution) {
+        MaxResolution = Resolution;
+        BestMode = ModeIndex;
+      }
+    }
+
+  Status = GraphicsOutput->SetMode(GraphicsOutput, BestMode);
   //
   // Fill screen with black.
   //
@@ -277,6 +297,12 @@ GetKernelFile (
   // LAB 1: Your code here
   (void)LoadedImage;
 
+  Status = gBS->HandleProtocol(
+      gImageHandle,
+      &gEfiLoadedImageProtocolGuid,
+      (void**)&LoadedImage
+  );
+
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find LoadedImage protocol - %r\n", Status));
     return Status;
@@ -295,6 +321,12 @@ GetKernelFile (
   // LAB 1: Your code here
   (void)FileSystem;
 
+  Status = gBS->HandleProtocol(
+      LoadedImage->DeviceHandle,
+      &gEfiSimpleFileSystemProtocolGuid,
+      (void**)&FileSystem
+  );
+
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot find own FileSystem protocol - %r\n", Status));
     return Status;
@@ -307,6 +339,8 @@ GetKernelFile (
   // LAB 1: Your code here
   (void)CurrentDriveRoot;
 
+  Status = FileSystem->OpenVolume(FileSystem, &CurrentDriveRoot);
+
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
     return Status;
@@ -318,6 +352,15 @@ GetKernelFile (
   //
   // LAB 1: Your code here
   KernelFile = NULL;
+
+  Status = CurrentDriveRoot->Open(
+      CurrentDriveRoot,
+      &KernelFile,
+      KERNEL_PATH,
+      EFI_FILE_MODE_READ,
+      0
+  );
+  CurrentDriveRoot->Close(CurrentDriveRoot);  
 
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "JOS: Cannot access own file system - %r\n", Status));
@@ -987,7 +1030,7 @@ UefiMain (
   UINTN              EntryPoint;
   VOID               *GateData;
 
-#if 1 ///< Uncomment to await debugging
+#if 0 ///< Uncomment to await debugging
   volatile BOOLEAN   Connected;
   DEBUG ((DEBUG_INFO, "JOS: Awaiting debugger connection\n"));
 
