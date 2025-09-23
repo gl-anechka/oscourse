@@ -113,27 +113,48 @@ InitGraphics (
   //
   // Hint: Use QueryMode/SetMode functions.
   //
+
     UINT32 ModeIndex;
     UINT32 MaxResolution = 0;
     UINT32 BestMode = 0;
+    BOOLEAN FoundSuitableMode = FALSE;
 
     for (ModeIndex = 0; ModeIndex < GraphicsOutput->Mode->MaxMode; ModeIndex++) {
-      EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info;
-      UINTN SizeOfInfo;
+      EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *Info = NULL;
+      UINTN SizeOfInfo = 0;
 
-      Status = GraphicsOutput->QueryMode(GraphicsOutput, ModeIndex, &SizeOfInfo, &Info);
-      if (EFI_ERROR(Status)) {
-        continue;
-      }
+    Status = GraphicsOutput->QueryMode(GraphicsOutput, ModeIndex, &SizeOfInfo, &Info);
+    if (EFI_ERROR(Status)) {
+      continue;
+    }
 
+    //проверка пикселей
+    BOOLEAN SupportedPixelFormat = (Info->PixelFormat == PixelBlueGreenRedReserved8BitPerColor) ||
+                                   (Info->PixelFormat == PixelRedGreenBlueReserved8BitPerColor);
+
+    if (SupportedPixelFormat) {
       UINT32 Resolution = Info->HorizontalResolution * Info->VerticalResolution;
       if (Resolution > MaxResolution) {
         MaxResolution = Resolution;
         BestMode = ModeIndex;
+        FoundSuitableMode = TRUE;
       }
     }
+    //во избежание утечки памяти
+    gBS->FreePool(Info);
+}
+
+  if (!FoundSuitableMode) {
+    DEBUG((DEBUG_WARN, "JOS: No suitable graphics mode found, using default mode 0\n"));
+    BestMode = 0;
+  }
 
   Status = GraphicsOutput->SetMode(GraphicsOutput, BestMode);
+  if (EFI_ERROR(Status)) {
+    DEBUG((DEBUG_ERROR, "JOS: Failed to set graphics mode %d - %r\n", BestMode, Status));
+    return Status;
+  }
+
   //
   // Fill screen with black.
   //
