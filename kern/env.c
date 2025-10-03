@@ -83,12 +83,20 @@ envid2env(envid_t envid, struct Env **env_store, bool need_check_perm) {
  * they are in the envs array (i.e., so that the first call to
  * env_alloc() returns envs[0]).
  */
+
 void
 env_init(void) {
 
     /* Set up envs array */
 
     // LAB 3: Your code here
+    env_free_list = NULL;
+    for (int i = NENV - 1; i >= 0; i--) {
+        envs[i].env_status = ENV_FREE;
+        envs[i].env_id = 0;
+        envs[i].env_link = env_free_list;
+        env_free_list = &envs[i];
+    }
 }
 
 /* Allocates and initializes a new environment.
@@ -145,7 +153,8 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
     env->env_tf.tf_cs = GD_KT;
 
     // LAB 3: Your code here:
-    // static uintptr_t stack_top = 0x2000000;
+    static uintptr_t stack_top = 0x2000000;
+    env->env_tf.tf_rsp = stack_top - (env - envs) * 2 * PAGE_SIZE;
 #else
     env->env_tf.tf_ds = GD_UD | 3;
     env->env_tf.tf_es = GD_UD | 3;
@@ -170,7 +179,54 @@ env_alloc(struct Env **newenv_store, envid_t parent_id, enum EnvType type) {
 static int
 bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_start, uintptr_t image_end) {
     // LAB 3: Your code here:
+    struct Elf *elf = (struct Elf *)binary;
+    struct Secthdr *sh = (struct Secthdr *)(binary + elf->e_shoff);
+    const char *sh_str = (char *)binary + sh[elf->e_shstrndx].sh_offset;
 
+    int strtab = -1;
+    for (int i = 0; i < elf->e_shnum; i++) {
+        if (sh[i].sh_type == ELF_SHT_STRTAB) {
+            if (!strcmp(".strtab", sh_str + sh[i].sh_name)) {
+                strtab = i;
+                break;
+            }
+        }
+    }
+    if (strtab < 0) {
+        panic("bind_functions: can't find .strtab\n");
+        return -1;
+    }
+    const char *str = (char *)binary + sh[strtab].sh_offset;
+
+    // ищем .symtab
+    for (int i = 0; i < elf->e_shnum; i++) {
+        if (sh[i].sh_type == ELF_SHT_SYMTAB &&
+            !strcmp(".symtab", sh_str + sh[i].sh_name)) {
+
+            struct Elf64_Sym *sym = (struct Elf64_Sym *)(binary + sh[i].sh_offset);
+            int num_sym = sh[i].sh_size / sizeof(sym[0]);
+
+            for (int j = 0; j < num_sym; j++) {
+                if (ELF64_ST_BIND(sym[j].st_info) != STB_GLOBAL) continue;
+                if (ELF64_ST_TYPE(sym[j].st_info) != STT_OBJECT) continue;
+                if (sym[j].st_size != sizeof(void *)) continue;
+
+                const char *name = str + sym[j].st_name;
+                uintptr_t addr = find_function(name);
+                if (!addr) continue;   // функция с таким именем в ядре не найдена
+
+                int sec = sym[j].st_shndx;
+                if (sec <= 0 || sec >= elf->e_shnum) continue;
+
+                if (sym[j].st_value < image_start || sym[j].st_value >= image_end) {
+                    continue;
+                }
+
+                // связывание через memcpy
+                memcpy((void *)sym[j].st_value, &addr, sizeof(addr));
+            }
+        }
+    }
     /* NOTE: find_function from kdebug.c should be used */
 
     return 0;
@@ -219,6 +275,25 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
+    struct Elf *elf = (struct Elf *) binary;
+        if (elf->e_magic != ELF_MAGIC) {
+            return -E_INVALID_EXE;
+        }
+        struct Proghdr *ph = (struct Proghdr *)(binary + elf->e_phoff);
+        struct Proghdr *eph = ph + elf->e_phnum;
+        for (; ph < eph; ph++) {
+            if (ph->p_type == ELF_PROG_LOAD) {
+                if (ph->p_filesz > ph->p_memsz) {
+                    return -E_INVALID_EXE;
+                }
+                memcpy((void *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+                if (ph->p_memsz > ph->p_filesz) {
+                    memset((void *)ph->p_va + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
+                }
+            }
+        }
+        env->env_tf.tf_rip = elf->e_entry;
+        bind_functions(env, binary, size, elf->e_entry, elf->e_entry + size);
 
     return 0;
 }
@@ -232,6 +307,16 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
+    struct Env *env;
+    int result;
+    
+    result = env_alloc(&env, 0, type);
+    if (result < 0) {
+        panic("env_create: %i", result);
+    }
+
+    env->binary = binary;
+    load_icode(env, binary, size);
 }
 
 
@@ -260,6 +345,11 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
+    env->env_status = ENV_DYING;
+    env_free(env);
+    if (curenv == env) {
+        sched_yield();
+    }
 }
 
 #ifdef CONFIG_KSPACE
@@ -349,6 +439,16 @@ env_run(struct Env *env) {
     }
 
     // LAB 3: Your code here
+    if (curenv) {
+            if (curenv->env_status == ENV_RUNNING) {
+                curenv->env_status = ENV_RUNNABLE;
+            }
+        }
+
+    curenv = env;
+    curenv->env_status = ENV_RUNNING;
+    curenv->env_runs++;
+    env_pop_tf(&curenv->env_tf);
 
     while (1)
         ;

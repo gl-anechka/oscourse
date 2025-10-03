@@ -98,6 +98,17 @@ find_function(const char *const fname) {
      * in assembly. */
 
     // LAB 3: Your code here:
+    struct Dwarf_Addrs addr;
+	load_kernel_dwarf_info(&addr);
+	uintptr_t offset = 0;
+	if (!address_by_fname(&addr, fname, &offset)) {
+		if (offset) {
+			return offset;
+		}
+	}
+	if (!naive_address_by_fname(&addr, fname, &offset)) {
+		return offset;
+	}
 
     return 0;
 }

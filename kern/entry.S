@@ -70,6 +70,14 @@ sys_yield:
     jmp .
 
 # LAB 3: Your code here:
+.global sys_exit
+.type sys_exit, @function
+sys_exit:
+    cli
+    leaq bootstacktop(%rip), %rsp
+    xor %ebp, %ebp
+    call csys_exit
+    jmp .
 
 #endif
 
