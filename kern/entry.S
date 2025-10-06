@@ -74,7 +74,7 @@ sys_yield:
 .type sys_exit, @function
 sys_exit:
     cli
-    leaq bootstacktop(%rip), %rsp
+    leaq (bootstacktop)(%rip), %rsp
     xor %ebp, %ebp
     call csys_exit
     jmp .

@@ -275,25 +275,58 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
-    struct Elf *elf = (struct Elf *) binary;
-        if (elf->e_magic != ELF_MAGIC) {
+    struct Elf *segments = (struct Elf*) binary;
+    if (segments->e_magic != ELF_MAGIC) {
+        cprintf("Incorrect format of ELF file");
+        return -E_INVALID_EXE;
+    }
+
+    if (segments->e_shentsize != sizeof (struct Secthdr)) {
+        cprintf("Incorrect section size");
+        return -E_INVALID_EXE;
+    }
+
+    if (segments->e_shstrndx >= segments->e_shnum) {
+        cprintf("Incorrect index of string section");
+        return -E_INVALID_EXE;
+    }
+
+    if (segments->e_phentsize != sizeof (struct Proghdr)) {
+        cprintf("Incorrect size of program headers");
+        return -E_INVALID_EXE;
+    }
+
+    uintptr_t image_start = 0;
+    bool start_set = 0;
+    uintptr_t image_end = 0;
+    struct Proghdr *ph_array = (struct Proghdr *)(binary + segments->e_phoff);
+    for (size_t i = 0; i < segments->e_phnum; i++) {
+        struct Proghdr *ph = ph_array + i;
+        if (ph->p_type != ELF_PROG_LOAD)
+            continue;
+
+        void *src = binary + ph->p_offset;
+        void *dst = (void *)(ph->p_va);
+        if (ph->p_filesz > ph->p_memsz) {
+            cprintf("Error. Incorrect filesz of section");
             return -E_INVALID_EXE;
         }
-        struct Proghdr *ph = (struct Proghdr *)(binary + elf->e_phoff);
-        struct Proghdr *eph = ph + elf->e_phnum;
-        for (; ph < eph; ph++) {
-            if (ph->p_type == ELF_PROG_LOAD) {
-                if (ph->p_filesz > ph->p_memsz) {
-                    return -E_INVALID_EXE;
-                }
-                memcpy((void *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
-                if (ph->p_memsz > ph->p_filesz) {
-                    memset((void *)ph->p_va + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
-                }
-            }
+
+        if (src + ph->p_filesz > (void *)binary + size || src < (void *)binary)
+            continue;
+
+        if (!start_set || (uintptr_t) dst < image_start) {
+            image_start = (uintptr_t) dst;
+            start_set = 1;
         }
-        env->env_tf.tf_rip = elf->e_entry;
-        bind_functions(env, binary, size, elf->e_entry, elf->e_entry + size);
+        if (image_end < (uintptr_t)(dst + ph->p_memsz))
+            image_end = (uintptr_t)(dst + ph->p_memsz);
+
+        memcpy(dst, src, ph->p_filesz);
+        memset(dst + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
+    }
+    env->env_tf.tf_rip = segments->e_entry;
+    bind_functions(env, binary, size, image_start, image_end);
 
     return 0;
 }
@@ -308,15 +341,14 @@ void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
     struct Env *env;
-    int result;
-    
-    result = env_alloc(&env, 0, type);
-    if (result < 0) {
-        panic("env_create: %i", result);
-    }
+    int status = env_alloc(&env, 0, type);
+    if (status < 0)
+        panic("Error. Can't allocate new environment : %i", status);
 
-    env->binary = binary;
-    load_icode(env, binary, size);
+    status = load_icode(env, binary, size);
+    if (status < 0)
+        panic("Error. Could not load executable : %i", status);
+    env->env_type = type;
 }
 
 
@@ -346,8 +378,9 @@ env_destroy(struct Env *env) {
 
     // LAB 3: Your code here
     env->env_status = ENV_DYING;
-    env_free(env);
-    if (curenv == env) {
+
+    if (env == curenv) {
+        env_free(env);
         sched_yield();
     }
 }
@@ -440,14 +473,17 @@ env_run(struct Env *env) {
 
     // LAB 3: Your code here
     if (curenv) {
-            if (curenv->env_status == ENV_RUNNING) {
-                curenv->env_status = ENV_RUNNABLE;
-            }
-        }
+        if (curenv->env_status == ENV_RUNNING)
+            curenv->env_status = ENV_RUNNABLE;
+    }
+
+    if (env->env_status != ENV_RUNNABLE)
+        panic("Error. Scheduled process is not runnable");
 
     curenv = env;
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs++;
+
     env_pop_tf(&curenv->env_tf);
 
     while (1)
