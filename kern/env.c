@@ -346,8 +346,10 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
         panic("Error. Can't allocate new environment : %i", status);
 
     status = load_icode(env, binary, size);
-    if (status < 0)
+    if (status < 0) {
+        env_free(env);
         panic("Error. Could not load executable : %i", status);
+    }
     env->env_type = type;
 }
 

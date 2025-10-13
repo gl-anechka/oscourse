@@ -27,7 +27,7 @@ sched_yield(void) {
     // LAB 3: Your code here:
     const size_t last_sched = curenv ? curenv - envs : 0;
 
-    size_t next = last_sched + 1;
+    size_t next = (last_sched + 1) % NENV;
 
     next %= NENV;
     while (next != last_sched) {
@@ -38,8 +38,9 @@ sched_yield(void) {
         next %= NENV;
     }
 
-    if (envs[next].env_status == ENV_RUNNABLE || envs[next].env_status == ENV_RUNNING)
+    if (envs[next].env_status == ENV_RUNNABLE || envs[next].env_status == ENV_RUNNING) {
         env_run(&envs[next]);
+    }
 
     cprintf("Halt\n");
 
