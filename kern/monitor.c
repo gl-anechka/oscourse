@@ -10,8 +10,10 @@
 
 #include <kern/console.h>
 #include <kern/monitor.h>
+#include <kern/kclock.h>
 #include <kern/kdebug.h>
 #include <kern/env.h>
+#include <kern/trap.h>
 
 #define WHITESPACE "\t\r\n "
 #define MAXARGS    16
@@ -20,7 +22,7 @@
 int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
-int mon_hello(int argc, char **arhv, struct Trapframe *tf);  /*произвольная команда*/
+int mon_dumpcmos(int argc, char **argv, struct Trapframe *tf);
 
 struct Command {
     const char *name;
@@ -33,7 +35,7 @@ static struct Command commands[] = {
         {"help", "Display this list of commands", mon_help},
         {"kerninfo", "Display information about the kernel", mon_kerninfo},
         {"backtrace", "Print stack backtrace", mon_backtrace},
-        {"hello", "Print some text", mon_hello},
+        {"dumpcmos", "Display CMOS contents", mon_dumpcmos},
 };
 #define NCOMMANDS (sizeof(commands) / sizeof(commands[0]))
 
@@ -97,16 +99,33 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf) {
         struct Ripdebuginfo info;
         int error = debuginfo_rip((uintptr_t)rip, &info);
         if (error == 0)
-            cprintf("    %s:%d: %*s+%lu\n",
-                    info.rip_file,
-                    info.rip_line,
-                    info.rip_fn_namelen,
-                    info.rip_fn_name, 
-                    rip - info.rip_fn_addr);
+            cprintf("    %s:%d: %*s+%lu\n", info.rip_file, info.rip_line, info.rip_fn_namelen, info.rip_fn_name, 
+                rip - info.rip_fn_addr);
         else
             cprintf("Error: getting debuginfo_rip() %lx\n", rip);
         rbp = *ptr;
     }
+    return 0;
+}
+
+// LAB 4: Your code here
+int
+mon_dumpcmos(int argc, char **argv, struct Trapframe *tf) {
+    // Dump CMOS memory in the following format:
+    // 00: 00 11 22 33 44 55 66 77 88 99 AA BB CC DD EE FF
+    // 10: 00 ..
+    // Make sure you understand the values read.
+    // Hint: Use cmos_read8()/cmos_write8() functions.
+    // LAB 4: Your code here
+    for (size_t i = 0; i < 128; i++) {
+        if (i == 0)
+            cprintf("00:");
+        else if (i % 16 == 0)
+            cprintf("\n%02lx:", i);
+        cprintf(" %02x", cmos_read8(i));
+    }
+    cprintf("\n");
+
     return 0;
 }
 
@@ -151,6 +170,8 @@ monitor(struct Trapframe *tf) {
 
     cprintf("Welcome to the JOS kernel monitor!\n");
     cprintf("Type 'help' for a list of commands.\n");
+
+    if (tf) print_trapframe(tf);
 
     char *buf;
     do buf = readline("K> ");

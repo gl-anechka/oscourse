@@ -9,7 +9,10 @@
 #include <kern/monitor.h>
 #include <kern/console.h>
 #include <kern/env.h>
+#include <kern/trap.h>
 #include <kern/sched.h>
+#include <kern/picirq.h>
+#include <kern/kclock.h>
 #include <kern/kdebug.h>
 #include <kern/traceopt.h>
 
@@ -89,6 +92,8 @@ early_boot_pml4_init(void) {
 void
 i386_init(void) {
 
+    //assert(false);
+
     early_boot_pml4_init();
 
     /* Initialize the console.
@@ -100,9 +105,15 @@ i386_init(void) {
         cprintf("END: %p\n", end);
     }
 
+    pic_init();
+    rtc_timer_init();
+    rtc_timer_pic_interrupt();
+
     /* Framebuffer init should be done after memory init */
     fb_init();
     if (trace_init) cprintf("Framebuffer initialised\n");
+
+    trap_init();
 
     /* User environment initialization functions */
     env_init();
@@ -112,6 +123,7 @@ i386_init(void) {
     ENV_CREATE_KERNEL_TYPE(prog_test1);
     ENV_CREATE_KERNEL_TYPE(prog_test2);
     ENV_CREATE_KERNEL_TYPE(prog_test3);
+    ENV_CREATE_KERNEL_TYPE(prog_test4);
 #else
 
 #if LAB >= 10
