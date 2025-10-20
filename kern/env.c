@@ -275,43 +275,98 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
+    //существует и имеет минимальный размер
+    if (binary == NULL || size < sizeof(struct Elf)) {
+        return -E_INVALID_EXE;
+    }
+
+    //магические число
     struct Elf *segments = (struct Elf*) binary;
     if (segments->e_magic != ELF_MAGIC) {
         cprintf("Incorrect format of ELF file");
         return -E_INVALID_EXE;
     }
 
+    //размер секции
     if (segments->e_shentsize != sizeof (struct Secthdr)) {
         cprintf("Incorrect section size");
         return -E_INVALID_EXE;
     }
 
+    //индекс секции
     if (segments->e_shstrndx >= segments->e_shnum) {
         cprintf("Incorrect index of string section");
         return -E_INVALID_EXE;
     }
 
+    //размер заголовка программы
     if (segments->e_phentsize != sizeof (struct Proghdr)) {
         cprintf("Incorrect size of program headers");
         return -E_INVALID_EXE;
     }
 
+    //границы заголовка
+    size_t phdr_size = segments->e_phnum * sizeof(struct Proghdr);
+    if (segments->e_phoff > size || phdr_size > size - segments->e_phoff) {
+        return -E_INVALID_EXE;
+    }
+
+    //таблица секций
+    size_t shdr_size = segments->e_shnum * sizeof(struct Secthdr);
+    if (segments->e_shoff > size || shdr_size > size - segments->e_shoff) {
+        return -E_INVALID_EXE;
+    }
+
+    //тип файла
+    if (segments->e_type != ET_EXEC) {
+        return -E_INVALID_EXE;
+    }
+
+    struct Proghdr *ph_array = (struct Proghdr *)(binary + segments->e_phoff);
+    //пересечение сегментов
+    for (size_t i = 0; i < segments->e_phnum; i++) {
+        struct Proghdr *ph1 = ph_array + i;
+        if (ph1->p_type != ELF_PROG_LOAD) continue;
+        
+        for (size_t j = i + 1; j < segments->e_phnum; j++) {
+            struct Proghdr *ph2 = ph_array + j;
+            if (ph2->p_type != ELF_PROG_LOAD) continue;
+            
+            uintptr_t start1 = ph1->p_va;
+            uintptr_t end1 = ph1->p_va + ph1->p_memsz;
+            uintptr_t start2 = ph2->p_va;
+            uintptr_t end2 = ph2->p_va + ph2->p_memsz;
+            
+            if (!(end1 <= start2 || end2 <= start1)) {
+                return -E_INVALID_EXE;
+            }
+        }
+    }
+
     uintptr_t image_start = 0;
     bool start_set = 0;
     uintptr_t image_end = 0;
-    struct Proghdr *ph_array = (struct Proghdr *)(binary + segments->e_phoff);
+    bool entry_point_valid = false;
+
     for (size_t i = 0; i < segments->e_phnum; i++) {
         struct Proghdr *ph = ph_array + i;
         if (ph->p_type != ELF_PROG_LOAD)
             continue;
 
-        void *src = binary + ph->p_offset;
-        void *dst = (void *)(ph->p_va);
-        if (ph->p_filesz > ph->p_memsz) {
-            cprintf("Error. Incorrect filesz of section");
+        //переполнение
+        if (ph->p_offset > size || size - ph->p_offset < ph->p_filesz) {
             return -E_INVALID_EXE;
         }
 
+        //размеры
+        if (ph->p_filesz > ph->p_memsz) {
+            return -E_INVALID_EXE;
+        }
+
+        void *src = binary + ph->p_offset;
+        void *dst = (void *)(ph->p_va);
+
+        //не выходят за пределы
         if (src + ph->p_filesz > (void *)binary + size || src < (void *)binary)
             continue;
 
@@ -319,12 +374,22 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             image_start = (uintptr_t) dst;
             start_set = 1;
         }
-        if (image_end < (uintptr_t)(dst + ph->p_memsz))
+        if (image_end < (uintptr_t)(dst + ph->p_memsz)) {
             image_end = (uintptr_t)(dst + ph->p_memsz);
+        }
+
+        //точка входа
+        if (segments->e_entry >= ph->p_va && segments->e_entry < ph->p_va + ph->p_memsz) {
+            entry_point_valid = true;
+        }
 
         memcpy(dst, src, ph->p_filesz);
         memset(dst + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
     }
+    if (!entry_point_valid) {
+        return -E_INVALID_EXE;
+    }
+
     env->env_tf.tf_rip = segments->e_entry;
     bind_functions(env, binary, size, image_start, image_end);
 
