@@ -95,8 +95,12 @@ env_init(void) {
      * Don't forget about rounding.
      * kzalloc_region() only works with current_space != NULL */
     // LAB 8: Your code here
-    envs = kzalloc_region(NENV * sizeof(*envs));
-    //memset(envs, 0, ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE));
+    if (!current_space) {
+        panic("current_space is NULL");
+    }
+
+    size_t envs_size = ROUNDUP(NENV * sizeof(*envs), PAGE_SIZE);
+    envs = kzalloc_region(envs_size);
     if (!envs) {
         panic("failed to allocate envs");
     }
@@ -104,8 +108,8 @@ env_init(void) {
     /* Map envs to UENVS read-only,
      * but user-accessible (with PROT_USER_ set) */
     // LAB 8: Your code here
-    map_region(current_space, UENVS, &kspace, (uintptr_t)envs, UENVS_SIZE, PROT_R | PROT_USER_);
-
+    map_region(current_space, UENVS, &kspace, (uintptr_t)envs, envs_size, PROT_R | PROT_USER_);
+    
     /* Set up envs array */
 
     // LAB 3: Your code here
@@ -301,128 +305,70 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
 static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
-<<<<<<< HEAD
-    //существует и имеет минимальный размер
-    if (binary == NULL || size < sizeof(struct Elf)) {
-        return -E_INVALID_EXE;
-    }
-
-    //магические число
     struct Elf *segments = (struct Elf*) binary;
     if (segments->e_magic != ELF_MAGIC) {
-        cprintf("Incorrect format of ELF file");
         return -E_INVALID_EXE;
     }
 
-    //размер секции
     if (segments->e_shentsize != sizeof (struct Secthdr)) {
-        cprintf("Incorrect section size");
         return -E_INVALID_EXE;
     }
 
-    //индекс секции
     if (segments->e_shstrndx >= segments->e_shnum) {
-        cprintf("Incorrect index of string section");
         return -E_INVALID_EXE;
     }
 
-    //размер заголовка программы
     if (segments->e_phentsize != sizeof (struct Proghdr)) {
-        cprintf("Incorrect size of program headers");
         return -E_INVALID_EXE;
     }
 
-    //границы заголовка
-    size_t phdr_size = segments->e_phnum * sizeof(struct Proghdr);
-    if (segments->e_phoff > size || phdr_size > size - segments->e_phoff) {
-        return -E_INVALID_EXE;
-    }
-
-    //таблица секций
-    size_t shdr_size = segments->e_shnum * sizeof(struct Secthdr);
-    if (segments->e_shoff > size || shdr_size > size - segments->e_shoff) {
-        return -E_INVALID_EXE;
-    }
-
-    //тип файла
-    if (segments->e_type != ET_EXEC) {
-        return -E_INVALID_EXE;
-    }
-
+    #ifdef CONFIG_KSPACE
+        uintptr_t image_start = 0;
+        bool start_set = 0;
+        uintptr_t image_end = 0;
+    #endif
+    //struct AddressSpace *old_space = switch_address_space(&env->address_space);
+    switch_address_space(&env->address_space);
     struct Proghdr *ph_array = (struct Proghdr *)(binary + segments->e_phoff);
-    //пересечение сегментов
-    for (size_t i = 0; i < segments->e_phnum; i++) {
-        struct Proghdr *ph1 = ph_array + i;
-        if (ph1->p_type != ELF_PROG_LOAD) continue;
-        
-        for (size_t j = i + 1; j < segments->e_phnum; j++) {
-            struct Proghdr *ph2 = ph_array + j;
-            if (ph2->p_type != ELF_PROG_LOAD) continue;
-            
-            uintptr_t start1 = ph1->p_va;
-            uintptr_t end1 = ph1->p_va + ph1->p_memsz;
-            uintptr_t start2 = ph2->p_va;
-            uintptr_t end2 = ph2->p_va + ph2->p_memsz;
-            
-            if (!(end1 <= start2 || end2 <= start1)) {
-                return -E_INVALID_EXE;
-            }
-        }
-    }
-
-    uintptr_t image_start = 0;
-    bool start_set = 0;
-    uintptr_t image_end = 0;
-    bool entry_point_valid = false;
-
     for (size_t i = 0; i < segments->e_phnum; i++) {
         struct Proghdr *ph = ph_array + i;
         if (ph->p_type != ELF_PROG_LOAD)
             continue;
 
-        //переполнение
-        if (ph->p_offset > size || size - ph->p_offset < ph->p_filesz) {
-            return -E_INVALID_EXE;
-        }
-
-        //размеры
+        void *src = binary + ph->p_offset;
+        void *dst = (void *)(ph->p_va);
         if (ph->p_filesz > ph->p_memsz) {
             return -E_INVALID_EXE;
         }
 
-        void *src = binary + ph->p_offset;
-        void *dst = (void *)(ph->p_va);
-
-        //не выходят за пределы
         if (src + ph->p_filesz > (void *)binary + size || src < (void *)binary)
             continue;
 
-        if (!start_set || (uintptr_t) dst < image_start) {
-            image_start = (uintptr_t) dst;
-            start_set = 1;
-        }
-        if (image_end < (uintptr_t)(dst + ph->p_memsz)) {
-            image_end = (uintptr_t)(dst + ph->p_memsz);
-        }
-
-        //точка входа
-        if (segments->e_entry >= ph->p_va && segments->e_entry < ph->p_va + ph->p_memsz) {
-            entry_point_valid = true;
-        }
-
+        #ifdef CONFIG_KSPACE
+            if (!start_set || (uintptr_t) dst < image_start) {
+                image_start = (uintptr_t) dst;
+                start_set = 1;
+            }
+            if (image_end < (uintptr_t)(dst + ph->p_memsz))
+                image_end = (uintptr_t)(dst + ph->p_memsz);
+        #endif
+        map_region(&env->address_space, ROUNDDOWN((uintptr_t) dst, PAGE_SIZE),
+            NULL, 0, ROUNDUP((uintptr_t)ph->p_memsz, PAGE_SIZE), PROT_RWX | PROT_USER_ | ALLOC_ZERO);
         memcpy(dst, src, ph->p_filesz);
         memset(dst + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
     }
-    if (!entry_point_valid) {
-        return -E_INVALID_EXE;
-    }
 
+    map_region(&env->address_space, USER_STACK_TOP - USER_STACK_SIZE,
+        NULL, 0, USER_STACK_SIZE, PROT_R | PROT_W | PROT_USER_ | ALLOC_ZERO);
+
+    switch_address_space(&env->address_space);
+    //switch_address_space(old_space);
     env->env_tf.tf_rip = segments->e_entry;
-    bind_functions(env, binary, size, image_start, image_end);
 
-=======
-    // LAB 8: Your code here
->>>>>>> lab8
+    #ifdef CONFIG_KSPACE
+        bind_functions(env, binary, size, image_start, image_end);
+    #endif
+    
     return 0;
 }
 
@@ -435,7 +381,10 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type) {
     // LAB 3: Your code here
-<<<<<<< HEAD
+    if (binary == NULL || size == 0) {
+        panic("Invalid binary or size");
+    }
+
     struct Env *env;
     int status = env_alloc(&env, 0, type);
     if (status < 0)
@@ -447,9 +396,7 @@ env_create(uint8_t *binary, size_t size, enum EnvType type) {
         panic("Error. Could not load executable : %i", status);
     }
     env->env_type = type;
-=======
     // LAB 8: Your code here
->>>>>>> lab8
 }
 
 
@@ -489,19 +436,17 @@ env_destroy(struct Env *env) {
      * it traps to the kernel. */
 
     // LAB 3: Your code here
-<<<<<<< HEAD
     env->env_status = ENV_DYING;
 
     if (env == curenv) {
         env_free(env);
         sched_yield();
     }
-=======
 
     /* Reset in_page_fault flags in case *current* environment
      * is getting destroyed after performing invalid memory access. */
     // LAB 8: Your code here
->>>>>>> lab8
+    in_page_fault = 0;
 }
 
 #ifdef CONFIG_KSPACE
@@ -585,7 +530,6 @@ env_run(struct Env *env) {
     }
 
     // LAB 3: Your code here
-<<<<<<< HEAD
     if (curenv) {
         if (curenv->env_status == ENV_RUNNING)
             curenv->env_status = ENV_RUNNABLE;
@@ -598,10 +542,9 @@ env_run(struct Env *env) {
     curenv->env_status = ENV_RUNNING;
     curenv->env_runs++;
 
+    switch_address_space(&curenv->address_space);
     env_pop_tf(&curenv->env_tf);
-=======
     // LAB 8: Your code here
->>>>>>> lab8
 
     while (1)
         ;
