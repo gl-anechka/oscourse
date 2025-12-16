@@ -20,16 +20,15 @@
 static int
 sys_cputs(const char *s, size_t len) {
     // LAB 8: Your code here
-    if (s == NULL) {
-        return -E_INVAL;
-    }
-
-    if (len == 0) {
-        return 0;
-    }
-
     user_mem_assert(curenv, s, len, PROT_R | PROT_USER_);
-    cprintf("%.*s", (int)len, s);
+
+#ifdef SANITAIZER_SHADOW_BASE
+    platform_asan_unpoison((void *)s, len);
+#endif
+    //cprintf("%.*s", (int)len, s);
+    for (int i = 0; i < len; i++) {
+        cputchar(*(s+i));
+    }
 
     /* Check that the user has permission to read memory [s, s+len).
      * Destroy the environment if not. */
@@ -48,11 +47,7 @@ sys_cgetc(void) {
 /* Returns the current environment's envid. */
 static envid_t
 sys_getenvid(void) {
-    // LAB 8: Your code here
-    if (curenv == NULL) {
-        return 0;
-    }
-    
+    // LAB 8: Your code here    
     return curenv->env_id;
 }
 
@@ -64,14 +59,9 @@ sys_getenvid(void) {
 static int
 sys_env_destroy(envid_t envid) {
     // LAB 8: Your code here.
-    struct Env *env;
-    if (envid == 0) {
-        env = curenv;
-    } else {
-        int r = envid2env(envid, &env, 1);
-        if (r < 0) {
-            return -E_BAD_ENV;
-        }
+    struct Env *env = NULL;
+    if (envid2env(envid, &env, false)) {
+        return -E_BAD_ENV;
     }
 
 #if 1 /* TIP: Use this snippet to log required for passing grade tests info */
@@ -95,7 +85,7 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
 
     // LAB 8: Your code here
     if (syscallno == SYS_cputs) {
-        return sys_cputs((const char *)a1, (size_t)a2);
+        sys_cputs((const char *)a1, (size_t)a2);
     } else if (syscallno == SYS_cgetc) {
         return sys_cgetc();
     } else if (syscallno == SYS_getenvid) {

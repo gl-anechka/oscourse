@@ -302,7 +302,7 @@ bind_functions(struct Env *env, uint8_t *binary, size_t size, uintptr_t image_st
  *   You must also do something with the program's entry point,
  *   to make sure that the environment starts executing there.
  *   What?  (See env_run() and env_pop_tf() below.) */
-static int
+/*static int
 load_icode(struct Env *env, uint8_t *binary, size_t size) {
     // LAB 3: Your code here
     struct Elf *segments = (struct Elf*) binary;
@@ -330,6 +330,7 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
     //struct AddressSpace *old_space = switch_address_space(&env->address_space);
     switch_address_space(&env->address_space);
     struct Proghdr *ph_array = (struct Proghdr *)(binary + segments->e_phoff);
+
     for (size_t i = 0; i < segments->e_phnum; i++) {
         struct Proghdr *ph = ph_array + i;
         if (ph->p_type != ELF_PROG_LOAD)
@@ -352,8 +353,11 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             if (image_end < (uintptr_t)(dst + ph->p_memsz))
                 image_end = (uintptr_t)(dst + ph->p_memsz);
         #endif
-        map_region(&env->address_space, ROUNDDOWN((uintptr_t) dst, PAGE_SIZE),
-            NULL, 0, ROUNDUP((uintptr_t)ph->p_memsz, PAGE_SIZE), PROT_RWX | PROT_USER_ | ALLOC_ZERO);
+
+        uintptr_t va_start = ROUNDDOWN((uintptr_t)dst, PAGE_SIZE);
+        uintptr_t va_end = ROUNDUP((uintptr_t)dst + ph->p_memsz, PAGE_SIZE);
+
+        map_region(&env->address_space, va_start, NULL, 0, va_end - va_start, PROT_RWX | PROT_USER_ | ALLOC_ZERO);
         memcpy(dst, src, ph->p_filesz);
         memset(dst + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
     }
@@ -369,6 +373,89 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
         bind_functions(env, binary, size, image_start, image_end);
     #endif
     
+    return 0;
+}*/
+
+static int
+load_icode(struct Env *env, uint8_t *binary, size_t size) {
+    // LAB 3: Your code here
+    // LAB 8: Your code here DONE
+    struct Elf *elf_image = (struct Elf *)binary;
+
+    if (elf_image->e_magic != ELF_MAGIC) {
+        cprintf("load_icode: file has magic %08X instead of %08X\n", elf_image->e_magic, ELF_MAGIC);
+        return -E_INVALID_EXE;
+    }
+
+    if (elf_image->e_shentsize != sizeof(struct Secthdr)) {
+        cprintf("load_icode: file has sections of %u bytes instead of %u\n", elf_image->e_shentsize,
+                (uint32_t)sizeof(struct Secthdr));
+        return -E_INVALID_EXE;
+    }
+
+    if (elf_image->e_shstrndx >= elf_image->e_shnum) {
+        cprintf("load_icode: file string section has invalid index %u out of %u entries\n", elf_image->e_shstrndx,
+                elf_image->e_shnum);
+        return -E_INVALID_EXE;
+    }
+
+    if (elf_image->e_phentsize != sizeof(struct Proghdr)) {
+        cprintf("load_icode: file has program headers of %u bytes instead of %u\n", elf_image->e_phentsize,
+                (uint32_t)sizeof(struct Proghdr));
+        return -E_INVALID_EXE;
+    }
+
+    switch_address_space(&env->address_space);
+    struct Proghdr *phs = (struct Proghdr *)((uint64_t)binary + elf_image->e_phoff);
+    uintptr_t image_start = UINTPTR_MAX, image_end = 0;
+
+    for (uint16_t i = 0; i < elf_image->e_phnum; i++) {
+        if (phs[i].p_type != ELF_PROG_LOAD) {
+            continue;
+        }
+
+        if (phs[i].p_filesz > phs[i].p_memsz) {
+            cprintf("load_icode: section %u has %lu filesz with %lu memsz\n", i, phs[i].p_filesz, phs[i].p_memsz);
+            switch_address_space(&kspace);
+            return -E_INVALID_EXE;
+        }
+
+        uintptr_t rounded_addr = ROUNDDOWN(phs[i].p_va, PAGE_SIZE);
+        size_t rounded_size = ROUNDUP(phs[i].p_memsz, PAGE_SIZE);
+
+        // memset((void *)(phs[i].p_va + phs[i].p_filesz), 0, (size_t)(phs[i].p_memsz - phs[i].p_filesz));
+
+        if (map_region(current_space, rounded_addr, NULL, 0, rounded_size, PROT_RWX | PROT_USER_ | ALLOC_ZERO)) {
+            cprintf("load_icode: failed to map region [%lx, %lx]\n", rounded_addr, rounded_addr + rounded_size - 1);
+            switch_address_space(&kspace);
+            return -E_INVALID_EXE;
+        }
+
+        memcpy((void *)phs[i].p_va, (void *)((uint64_t)binary + phs[i].p_offset), (size_t)phs[i].p_filesz);
+
+        if (image_start > (uintptr_t)phs[i].p_va) {
+            image_start = (uintptr_t)phs[i].p_va;
+        }
+
+        if (image_end < (uintptr_t)(phs[i].p_va + phs[i].p_filesz)) {
+            image_end = (uintptr_t)(phs[i].p_va + phs[i].p_filesz);
+        }
+    }
+
+    uintptr_t stack_addr = (uintptr_t)(USER_STACK_TOP - USER_STACK_SIZE);
+    if (map_region(&env->address_space, stack_addr, NULL, 0, USER_STACK_SIZE, PROT_R | PROT_W | PROT_USER_ | ALLOC_ZERO)) {
+        cprintf("load_icode: failed to map user stack\n");
+        switch_address_space(&kspace);
+        return -E_INVALID_EXE;
+    }
+
+    switch_address_space(&kspace);
+    env->env_tf.tf_rip = elf_image->e_entry;
+#ifdef CONFIG_KSPACE
+    if (bind_functions(env, binary, size, image_start, image_end)) {
+        panic("load_icode: bind_functions has failed\n");
+    }
+#endif
     return 0;
 }
 

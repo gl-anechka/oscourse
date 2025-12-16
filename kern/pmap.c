@@ -2092,7 +2092,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm) {
         current += PAGE_SIZE;
     }
     if ((uintptr_t)end > MAX_USER_READABLE) {
-        user_mem_check_addr = MAX(MAX_USER_READABLE, (uintptr_t)current);
+        user_mem_check_addr = MAX_USER_READABLE;
         return -E_FAULT;
     }
     return 0;
