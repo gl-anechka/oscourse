@@ -95,60 +95,57 @@ trapname(int trapno) {
     return "(unknown trap)";
 }
 
-void clock_thdlr(void);
-void timer_thdlr(void);
-void divide_thdlr(void);
-void debug_thdlr(void);
-void nmi_thdlr(void);
-void brkpt_thdlr(void);
-void oflow_thdlr(void);
-void bound_thdlr(void);
-void illop_thdlr(void);
-void device_thdlr(void);
-void tss_thdlr(void);
-void segnp_thdlr(void);
-void stack_thdlr(void);
-void gpflt_thdlr(void);
-void pgflt_thdlr(void);
-void fperr_thdlr(void);
-void syscall_thdlr(void);
-void dblflt_thdlr(void);
-void mchk_thdlr(void);
-void align_thdlr(void);
-void simderr_thdlr(void);
+extern void clock_thdlr(void);
+extern void timer_thdlr(void);
+
+extern void thdlr0(void);
+extern void thdlr1(void);
+extern void thdlr2(void);
+extern void thdlr3(void);
+extern void thdlr4(void);
+extern void thdlr5(void);
+extern void thdlr6(void);
+extern void thdlr7(void);
+extern void thdlr8(void);
+extern void thdlr10(void);
+extern void thdlr11(void);
+extern void thdlr12(void);
+extern void thdlr13(void);
+extern void thdlr14(void);
+extern void thdlr15(void);
+extern void thdlr16(void);
+extern void thdlr17(void);
+extern void thdlr18(void);
+extern void thdlr19(void);
+extern void thdlr48(void);
 
 void
 trap_init(void) {
     // LAB 4: Your code here
-    //idt[IRQ_OFFSET + IRQ_CLOCK] = GATE(0, GD_KT, clock_thdlr, 0);
-
+    idt[IRQ_OFFSET + IRQ_CLOCK] = GATE(0, GD_KT, clock_thdlr, 0);
     // LAB 5: Your code here
-    //idt[IRQ_OFFSET + IRQ_TIMER] = GATE(0, GD_KT, timer_thdlr, 0);
-
+    idt[IRQ_OFFSET + IRQ_TIMER] = GATE(0, GD_KT, timer_thdlr, 0);
     // LAB 8: Your code here
     /* Insert trap handlers into IDT */
-    idt[T_DIVIDE] = GATE(0, GD_KT, (uint64_t)divide_thdlr, 0);
-    idt[T_DEBUG] = GATE(0, GD_KT, (uint64_t)debug_thdlr, 0);
-    idt[T_NMI] = GATE(0, GD_KT, (uint64_t)nmi_thdlr, 0);
-    idt[T_BRKPT] = GATE(0, GD_KT, (uint64_t)brkpt_thdlr, 3);
-    idt[T_OFLOW] = GATE(0, GD_KT, (uint64_t)oflow_thdlr, 0);
-    idt[T_BOUND] = GATE(0, GD_KT, (uint64_t)bound_thdlr, 0);
-    idt[T_ILLOP] = GATE(0, GD_KT, (uint64_t)illop_thdlr, 0);
-    idt[T_DEVICE] = GATE(0, GD_KT, (uint64_t)device_thdlr, 0);
-    idt[T_DBLFLT] = GATE(0, GD_KT, (uint64_t)dblflt_thdlr, 0);
-    idt[T_TSS] = GATE(0, GD_KT, (uint64_t)tss_thdlr, 0);
-    idt[T_SEGNP] = GATE(0, GD_KT, (uint64_t)segnp_thdlr, 0);
-    idt[T_STACK] = GATE(0, GD_KT, (uint64_t)stack_thdlr, 0);
-    idt[T_GPFLT] = GATE(0, GD_KT, (uint64_t)gpflt_thdlr, 0);
-    idt[T_PGFLT] = GATE(0, GD_KT, (uint64_t)pgflt_thdlr, 0);
-    idt[T_FPERR] = GATE(0, GD_KT, (uint64_t)fperr_thdlr, 0);
-    idt[T_ALIGN] = GATE(0, GD_KT, (uint64_t)align_thdlr, 0);
-    idt[T_MCHK] = GATE(0, GD_KT, (uint64_t)mchk_thdlr, 0);
-    idt[T_SIMDERR] = GATE(0, GD_KT, (uint64_t)simderr_thdlr, 0);
-    idt[T_SYSCALL] = GATE(0, GD_KT, (uint64_t)syscall_thdlr, 3);
-    idt[IRQ_OFFSET + IRQ_CLOCK] = GATE(0, GD_KT, (uint64_t)clock_thdlr, 0);
-    idt[IRQ_OFFSET + IRQ_TIMER] = GATE(0, GD_KT, (uint64_t)timer_thdlr, 0);
-
+    idt[T_DIVIDE] = GATE(0, GD_KT, thdlr0, 0);
+    idt[T_DEBUG] = GATE(0, GD_KT, thdlr1, 0);
+    idt[T_NMI] = GATE(0, GD_KT, thdlr2, 0);
+    idt[T_BRKPT] = GATE(0, GD_KT, thdlr3, 3);
+    idt[T_OFLOW] = GATE(0, GD_KT, thdlr4, 0);
+    idt[T_BOUND] = GATE(0, GD_KT, thdlr5, 0);
+    idt[T_ILLOP] = GATE(0, GD_KT, thdlr6, 0);
+    idt[T_DEVICE] = GATE(0, GD_KT, thdlr7, 0);
+    idt[T_DBLFLT] = GATE(0, GD_KT, thdlr8, 0);
+    idt[T_TSS] = GATE(0, GD_KT, thdlr10, 0);
+    idt[T_SEGNP] = GATE(0, GD_KT, thdlr11, 0);
+    idt[T_STACK] = GATE(0, GD_KT, thdlr12, 0);
+    idt[T_GPFLT] = GATE(0, GD_KT, thdlr13, 0);
+    idt[T_PGFLT] = GATE(0, GD_KT, thdlr14, 0);
+    idt[T_FPERR] = GATE(0, GD_KT, thdlr16, 0);
+    idt[T_ALIGN] = GATE(0, GD_KT, thdlr17, 0);
+    idt[T_MCHK] = GATE(0, GD_KT, thdlr18, 0);
+    idt[T_SIMDERR] = GATE(0, GD_KT, thdlr19, 0);
+    idt[T_SYSCALL] = GATE(0, GD_KT, thdlr48, 3);
     /* Setup #PF handler dedicated stack
      * It should be switched on #PF because
      * #PF is the only kind of exception that
@@ -284,8 +281,8 @@ trap_dispatch(struct Trapframe *tf) {
             print_trapframe(tf);
         }
         return;
-    case IRQ_OFFSET + IRQ_TIMER:
     case IRQ_OFFSET + IRQ_CLOCK:
+    case IRQ_OFFSET + IRQ_TIMER:
         // LAB 4: Your code here
         // LAB 5: Your code here
         timer_for_schedule->handle_interrupts();
