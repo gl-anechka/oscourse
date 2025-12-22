@@ -145,8 +145,8 @@ platform_asan_init(void) {
     foreach_shared_region(asan_unpoison_shared_region, NULL);
 #endif
 
-    platform_asan_unpoison(asan_internal_shadow_start, 
-                          asan_internal_shadow_end - asan_internal_shadow_start);
+    //platform_asan_unpoison(asan_internal_shadow_start, 
+    //                      asan_internal_shadow_end - asan_internal_shadow_start);
 }
 
 void

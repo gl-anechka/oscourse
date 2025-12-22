@@ -497,9 +497,7 @@ page_fault_handler(struct Trapframe *tf) {
     
     /* Reset in_page_fault flag */
     // LAB 9: Your code here:
-    if (envs->env_tf.tf_trapno == T_PGFLT) {
-        in_page_fault = 0;
-    }
+    in_page_fault = 0;
 
     /* Rerun current environment */
     // LAB 9: Your code here:
