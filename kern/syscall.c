@@ -282,6 +282,35 @@ sys_unmap_region(envid_t envid, uintptr_t va, size_t size) {
     return 0;
 }
 
+/* Map region of physical memory to the userspace address.
+ * This is meant to be used by the userspace drivers, of which
+ * the only one currently is the filesystem server.
+ *
+ * Return 0 on succeeds, < 0 on error. Erros are:
+ *  -E_BAD_ENV if environment envid doesn't currently exist,
+ *      or the caller doesn't have permission to change envid.
+ *  -E_BAD_ENV if is not a filesystem driver (ENV_TYPE_FS).
+ *  -E_INVAL if va >= MAX_USER_ADDRESS, or va is not page-aligned.
+ *  -E_INVAL if pa is not page-aligned.
+ *  -E_INVAL if size is not page-aligned.
+ *  -E_INVAL if prem contains invalid flags
+ *     (including PROT_SHARE, PROT_COMBINE or PROT_LAZY).
+ *  -E_NO_MEM if address does not exist.
+ *  -E_NO_ENT if address is already used. */
+static int
+sys_map_physical_region(uintptr_t pa, envid_t envid, uintptr_t va, size_t size, int perm) {
+    // LAB 10: Your code here
+
+    struct Env* new = NULL;
+
+    if (envid2env(envid, &new, 1) < 0 || new->env_type != ENV_TYPE_FS) {
+        return -E_BAD_ENV;
+    }
+
+    if (va >= MAX_USER_ADDRESS || PAGE_OFFSET(va) || PAGE_OFFSET(pa) || PAGE_OFFSET(size) || size > MAX_USER_ADDRESS || MAX_USER_ADDRESS - va < size || perm & (PROT_SHARE | PROT_COMBINE | PROT_LAZY)) return -E_INVAL;
+    return map_physical_region(&new->address_space, va, pa, size, perm | PROT_USER_ | MAP_USER_MMIO);
+}
+
 /* Try to send 'value' to the target env 'envid'.
  * If srcva < MAX_USER_ADDRESS, then also send region currently mapped at 'srcva',
  * so that receiver gets mapping.
@@ -415,7 +444,11 @@ static int
 sys_region_refs(uintptr_t addr, size_t size, uintptr_t addr2, uintptr_t size2) {
     // LAB 10: Your code here
 
-    return 0;
+    if (addr2 >= MAX_USER_ADDRESS) {
+        return region_maxref(&curenv->address_space, addr, size);
+    }
+
+    return region_maxref(&curenv->address_space, addr, size) - region_maxref(&curenv->address_space, addr2, size2);
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -425,7 +458,7 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
      * Return any appropriate return value. */
 
     // LAB 8: Your code here
-    switch(syscallno) {
+        switch(syscallno) {
     case SYS_cputs:
         return sys_cputs((const char *)a1, (size_t)a2);
     case SYS_cgetc:
@@ -438,8 +471,12 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_alloc_region((envid_t)a1, (uintptr_t)a2, (size_t)a3, (int)a4);
     case SYS_map_region:
         return sys_map_region((envid_t)a1, (uintptr_t)a2, (envid_t)a3, (uintptr_t)a4, (size_t)a5, (int)a6);
+    case SYS_map_physical_region:
+        return sys_map_physical_region((uintptr_t)a1, (envid_t)a2, (uintptr_t)a3, (size_t)a4, (int)a5);
     case SYS_unmap_region:
         return sys_unmap_region((envid_t)a1, (uintptr_t)a2, (size_t)a3);
+    case SYS_region_refs:
+        return sys_region_refs((uintptr_t)a1, (size_t)a2, (uintptr_t)a3, (uintptr_t)a4);
     case SYS_exofork:
         return sys_exofork();
     case SYS_env_set_status:
@@ -448,6 +485,7 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_env_set_pgfault_upcall((envid_t)a1, (void*)a2);
     case SYS_yield:
         sys_yield();
+        return 0;
     case SYS_ipc_try_send:
         return sys_ipc_try_send((envid_t)a1, (uint32_t)a2, (uintptr_t)a3, (size_t)a4, (int)a5);
     case SYS_ipc_recv:
@@ -456,4 +494,5 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return -E_NO_SYS;
     }
     // LAB 9: Your code here
+    // LAB 10: Your code here
 }
