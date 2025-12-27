@@ -3,18 +3,28 @@
 
 .data
 
-# Define the global symbols 'envs', 'uvpt', 'uvpd', 'uvpdp' and 'uvpml4'
+# Define the global symbols 'envs', 'vsys', 'uvpt', 'uvpd', 'uvpdp' and 'uvpml4'
 # so that they can be used in C as if they were ordinary global arrays
+# TIP: Use constants UVSYS, UENVS, UVPT, UVPD, UVPDP, UVPML4
+#      via '.set' and '.global' assembly directives
+# LAB 12: Your code here
 .globl envs
 .set envs, UENVS
+
 .globl uvpt
 .set uvpt, UVPT
+
 .globl uvpd
 .set uvpd, UVPD
+
 .globl uvpdp
-.set uvpdp,UVPDP
+.set uvpdp, UVPDP
+
 .globl uvpml4
-.set uvpml4,UVPML4
+.set uvpml4, UVPML4
+
+.globl vsys
+.set vsys, UVSYS
 
 # Entrypoint - this is where the kernel (or our parent environment)
 # starts us running when we are initially loaded into a new environment
