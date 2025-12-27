@@ -121,6 +121,9 @@ extern void thdlr18(void);
 extern void thdlr19(void);
 extern void thdlr48(void);
 
+extern void kbd_thdlr(void);
+extern void serial_thdlr(void);
+
 void
 trap_init(void) {
     // LAB 4: Your code here
@@ -154,6 +157,10 @@ trap_init(void) {
      * can legally happen during normal kernel
      * code execution */
     idt[T_PGFLT].gd_ist = 1;
+
+    // LAB 11: Your code here
+    idt[IRQ_OFFSET + IRQ_KBD] = GATE(0, GD_KT, kbd_thdlr, 3);
+    idt[IRQ_OFFSET + IRQ_SERIAL] = GATE(0, GD_KT, serial_thdlr, 3);
 
     /* Per-CPU setup */
     trap_init_percpu();
@@ -293,6 +300,17 @@ trap_dispatch(struct Trapframe *tf) {
         // LAB 4: Your code here
         // LAB 5: Your code here
         timer_for_schedule->handle_interrupts();
+        sched_yield();
+        return;
+        // LAB 11: Your code here
+        /* Handle keyboard (IRQ_KBD + kbd_intr()) and
+         * serial (IRQ_SERIAL + serial_intr()) interrupts. */
+    case IRQ_OFFSET + IRQ_KBD:
+        kbd_intr();
+        sched_yield();
+        return;
+    case IRQ_OFFSET+ IRQ_SERIAL:
+        serial_intr();
         sched_yield();
         return;
     default:
