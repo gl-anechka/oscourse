@@ -341,18 +341,32 @@ load_icode(struct Env *env, uint8_t *binary, size_t size) {
             return -E_INVALID_EXE;
         }
 
-        uintptr_t rounded_addr = ROUNDDOWN(phs[i].p_va, PAGE_SIZE);
-        size_t rounded_size = ROUNDUP(phs[i].p_memsz, PAGE_SIZE);
+        uintptr_t seg_start = ROUNDDOWN(phs[i].p_va, PAGE_SIZE);
+        uintptr_t seg_end   = ROUNDUP(phs[i].p_va + phs[i].p_memsz, PAGE_SIZE);
+        size_t rounded_size = seg_end - seg_start;
 
-        // memset((void *)(phs[i].p_va + phs[i].p_filesz), 0, (size_t)(phs[i].p_memsz - phs[i].p_filesz));
+        int prot = PROT_USER_;
 
-        if (map_region(current_space, rounded_addr, NULL, 0, rounded_size, PROT_RWX | PROT_USER_ | ALLOC_ZERO)) {
-            cprintf("load_icode: failed to map region [%lx, %lx]\n", rounded_addr, rounded_addr + rounded_size - 1);
+        if (phs[i].p_flags & ELF_PROG_FLAG_READ)
+            prot |= PROT_R;
+        if (phs[i].p_flags & ELF_PROG_FLAG_WRITE)
+            prot |= PROT_W;
+        if (phs[i].p_flags & ELF_PROG_FLAG_EXEC)
+            prot |= PROT_X;
+
+        if (map_region(current_space, seg_start, NULL, 0, rounded_size, prot | ALLOC_ZERO | PROT_W)) {
+            cprintf("load_icode: failed to map region [%lx, %lx]\n", seg_start, seg_end - 1);
             switch_address_space(&kspace);
             return -E_INVALID_EXE;
         }
 
         memcpy((void *)phs[i].p_va, (void *)((uint64_t)binary + phs[i].p_offset), (size_t)phs[i].p_filesz);
+
+        if (map_region(current_space, seg_start, current_space, seg_start, rounded_size, prot) < 0) {
+            cprintf("load_icode: failed to protect region [%lx, %lx]\n", seg_start, seg_end - 1);
+            switch_address_space(&kspace);
+            return -E_INVALID_EXE;
+        }
 
         if (image_start > (uintptr_t)phs[i].p_va) {
             image_start = (uintptr_t)phs[i].p_va;

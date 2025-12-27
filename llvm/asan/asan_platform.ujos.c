@@ -66,16 +66,25 @@ platform_abort() {
  */
 
 static bool
-asan_shadow_allocator(struct UTrapframe *utf) {
-    // LAB 9: Your code here
-    if (SHADOW_ADDRESS_VALID((void *)utf->utf_fault_va)) {
-        if (sys_alloc_region(CURENVID, ROUNDDOWN((void *)utf->utf_fault_va, SHADOW_STEP), SHADOW_STEP, ALLOC_ONE | PROT_RW)) {
-            platform_abort();
-        }
+asan_shadow_allocator(struct UTrapframe *utf)
+{
+    uintptr_t va = (uintptr_t)utf->utf_fault_va;
 
-        return 1;
-    }
-    return 0;
+    if (!SHADOW_ADDRESS_VALID((void*)va))
+        return 0;
+
+    uintptr_t self_lo = (uintptr_t)SHADOW_FOR_ADDRESS((uintptr_t)asan_internal_shadow_start);
+    uintptr_t self_hi = (uintptr_t)SHADOW_FOR_ADDRESS((uintptr_t)asan_internal_shadow_end - 1) + 1;
+
+    if (va >= self_lo && va < self_hi)
+        return 0;
+
+    uintptr_t base = ROUNDDOWN(va, SHADOW_STEP);
+
+    if (sys_alloc_region(CURENVID, (void*)base, SHADOW_STEP, ALLOC_ONE | PROT_RW) < 0)
+        platform_abort();
+
+    return 1;
 }
 #endif
 
