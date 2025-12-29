@@ -46,6 +46,10 @@ bc_pgfault(struct UTrapframe *utf) {
         panic("bc_pgfault: can't nvme_read(), errno %i\n", res);
     }
 
+    if ((res = sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, PTE_SYSCALL & get_prot(addr)))) {
+        panic("bc_pgfault: sys_map_region failed, errno %d\n", res);
+    }
+
     return 1;
 }
 
