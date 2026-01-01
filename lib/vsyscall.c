@@ -6,7 +6,7 @@ vsyscall(int num) {
     // LAB 12: Your code here
     (void)num;
     if (num < NSYSCALLS) {
-        return vsys[num];
+        return __atomic_load_n(&vsys[num], __ATOMIC_ACQUIRE);
     } else {
         return -E_INVAL;
     }
