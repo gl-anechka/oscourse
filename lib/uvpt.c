@@ -62,19 +62,38 @@ foreach_shared_region(int (*fun)(void *start, void *end, void *arg), void *arg) 
     // LAB 11: Your code here:
 
     int res = 0;
-    (void)fun, (void)arg;
 
-    for (uintptr_t addr = 0; addr < MAX_USER_ADDRESS; addr += PAGE_SIZE) {
-        if (!(uvpml4[VPML4(addr)] & PTE_P) || 
-            !(uvpdp[VPDP(addr)] & PTE_P) || 
-            !(uvpd[VPD(addr)] & PTE_P))
+    for (uintptr_t addr = 0; addr < MAX_USER_ADDRESS; ) {
+        if (!(uvpml4[VPML4(addr)] & PTE_P)) {
+            uintptr_t next = (uintptr_t)MAKE_ADDR(PML4_INDEX(addr) + 1, 0, 0, 0, 0);
+            if (next <= addr) break;
+            addr = next;
             continue;
+        }
 
-        if (uvpt[VPT(addr)] & PTE_P && uvpt[VPT(addr)] & PTE_SHARE)
-            res = fun((void*)addr, (void *)(addr + PAGE_SIZE), arg);
+        pdpe_t pdpe = uvpdp[VPDP(addr)];
+        if (!(pdpe & PTE_P) || (pdpe & PTE_PS)) {
+            uintptr_t next = (uintptr_t)MAKE_ADDR(PML4_INDEX(addr), PDP_INDEX(addr) + 1, 0, 0, 0);
+            if (next <= addr) break;
+            addr = next;
+            continue;
+        }
 
-        if (res) return res;
+        pde_t pde = uvpd[VPD(addr)];
+        if (!(pde & PTE_P) || (pde & PTE_PS)) {
+            addr = ROUNDDOWN(addr + HUGE_PAGE_SIZE, HUGE_PAGE_SIZE);
+            continue;
+        }
+
+        pte_t pte = uvpt[VPT(addr)];
+        if ((pte & (PTE_P | PTE_SHARE)) == (PTE_P | PTE_SHARE)) {
+            res = fun((void *)addr, (void *)(addr + PAGE_SIZE), arg);
+            if (res)
+                return res;
+        }
+
+        addr += PAGE_SIZE;
     }
 
-    return res;
+    return 0;
 }
