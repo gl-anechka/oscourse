@@ -40,13 +40,13 @@ bc_pgfault(struct UTrapframe *utf) {
         panic("bc_pgfault: can't sys_alloc_region(), errno %i\n", res);
     }
 
-    *(uint8_t *)addr = 0; 
+    *(volatile uint8_t *)addr = 0;
 
     if ((res = nvme_read(BLKSECTS * blockno, addr, BLKSECTS)) != NVME_OK) {
         panic("bc_pgfault: can't nvme_read(), errno %i\n", res);
     }
     
-    if ((res = sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, PTE_SYSCALL & get_prot(addr)))) {
+    if ((res = sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, get_prot(addr)))) {
         panic("bc_pgfault: sys_map_region failed, errno %d\n", res);
     }
 
@@ -81,7 +81,7 @@ flush_block(void *addr) {
         panic("flush_block: can't nvme_write(), errno %i\n", res);
     }
 
-    if ((res = sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, PTE_SYSCALL & get_prot(addr)))) {
+    if ((res = sys_map_region(CURENVID, addr, CURENVID, addr, BLKSIZE, get_prot(addr)))) {
         panic("flush_block: can't sys_map_region(), errno %i\n", res);
     }
 
