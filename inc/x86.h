@@ -183,9 +183,9 @@ rdmsr(uint32_t msr) {
 static inline void __attribute__((always_inline))
 wrmsr(uint32_t msr, uint64_t val) {
     uint64_t rax = val & 0xFFFFFFFF, rdx = val >> 32;
-    asm volatile("rdmsr"
+    /*asm volatile("rdmsr"
                  : "=a"(rax), "=d"(rdx)
-                 : "c"(msr));
+                 : "c"(msr));*/
     // itask
     asm volatile("wrmsr"
                  :
