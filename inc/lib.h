@@ -33,6 +33,22 @@ void *__nosan_memcpy(void *, const void *src, size_t);
 
 #define USED(x) (void)(x)
 
+// itask
+/* Change syscall mechanism */
+#define JOS_SYSCALL_MECH_INT     0
+#define JOS_SYSCALL_MECH_SYSCALL 1
+
+/* syscall.c */
+extern int jos_syscall_mechanism;
+
+void sys_set_syscall_mechanism(int mech);
+int  sys_get_syscall_mechanism(void);
+int  sys_nop(void);
+int64_t jos_syscall(uintptr_t num, bool check,
+                    uintptr_t a1, uintptr_t a2, uintptr_t a3,
+                    uintptr_t a4, uintptr_t a5, uintptr_t a6);
+
+
 /* main user program */
 void umain(int argc, char **argv);
 
@@ -102,10 +118,13 @@ int vsys_gettime(void);
 /* This must be inlined. Exercise for reader: why? */
 static inline envid_t __attribute__((always_inline))
 sys_exofork(void) {
-    envid_t ret;
+    /*envid_t ret;
     asm volatile("int %2"
                  : "=a"(ret)
-                 : "a"(SYS_exofork), "i"(T_SYSCALL));
+                 : "a"(SYS_exofork), "i"(T_SYSCALL));*/
+    // itask
+    int64_t ret = jos_syscall(SYS_exofork, 0, 0, 0, 0, 0, 0, 0);
+    if (ret < 0) panic("sys_exofork: %ld", ret);
     return ret;
 }
 
