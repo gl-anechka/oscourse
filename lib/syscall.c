@@ -7,31 +7,6 @@
 // itask
 int jos_syscall_mechanism = JOS_SYSCALL_MECH_SYSCALL;
 
-/* Old variant */
-static inline int64_t __attribute__((always_inline))
-raw_int_syscall(uintptr_t num, bool check,
-                uintptr_t a1, uintptr_t a2, uintptr_t a3,
-                uintptr_t a4, uintptr_t a5, uintptr_t a6) {
-    intptr_t ret;
-    register uintptr_t _a0 asm("rax") = num;
-    register uintptr_t _a1 asm("rdx") = a1;
-    register uintptr_t _a2 asm("rcx") = a2;
-    register uintptr_t _a3 asm("rbx") = a3;
-    register uintptr_t _a4 asm("rdi") = a4;
-    register uintptr_t _a5 asm("rsi") = a5;
-    register uintptr_t _a6 asm("r8")  = a6;
-
-    asm volatile("int %1\n"
-                 : "=a"(ret)
-                 : "i"(T_SYSCALL), "r"(_a0), "r"(_a1), "r"(_a2), "r"(_a3),
-                   "r"(_a4), "r"(_a5), "r"(_a6)
-                 : "cc", "memory");
-
-    if (check && ret > 0)
-        panic("syscall %zd returned %zd (>0)", num, ret);
-    return ret;
-}
-
 /* Syscall/sysret */
 static inline int64_t __attribute__((always_inline))
 raw_syscall_sysret(uintptr_t num, bool check,
@@ -54,35 +29,6 @@ raw_syscall_sysret(uintptr_t num, bool check,
     if (check && ret > 0)
         panic("syscall %zd returned %zd (>0)", num, ret);
     return ret;
-}
-
-/* Mechanism selector */
-int64_t
-jos_syscall(uintptr_t num, bool check,
-            uintptr_t a1, uintptr_t a2, uintptr_t a3,
-            uintptr_t a4, uintptr_t a5, uintptr_t a6) {
-    switch (jos_syscall_mechanism) {
-        case JOS_SYSCALL_MECH_SYSCALL:
-            return raw_syscall_sysret(num, check, a1, a2, a3, a4, a5, a6);
-        case JOS_SYSCALL_MECH_INT:
-        default:
-            return raw_int_syscall(num, check, a1, a2, a3, a4, a5, a6);
-    }
-}
-
-void
-sys_set_syscall_mechanism(int mech) {
-    jos_syscall_mechanism = mech;
-}
-
-int 
-sys_get_syscall_mechanism(void) {
-    return jos_syscall_mechanism;
-}
-
-int
-sys_nop(void) {
-    return (int)jos_syscall(SYS_nop, 0, 0,0,0,0,0,0);
 }
 
 
@@ -125,6 +71,35 @@ syscall(uintptr_t num, bool check, uintptr_t a1, uintptr_t a2, uintptr_t a3, uin
 }
 
 // itask
+/* Mechanism selector */
+int64_t
+jos_syscall(uintptr_t num, bool check,
+            uintptr_t a1, uintptr_t a2, uintptr_t a3,
+            uintptr_t a4, uintptr_t a5, uintptr_t a6) {
+    switch (jos_syscall_mechanism) {
+        case JOS_SYSCALL_MECH_SYSCALL:
+            return raw_syscall_sysret(num, check, a1, a2, a3, a4, a5, a6);
+        case JOS_SYSCALL_MECH_INT:
+        default:
+            return syscall(num, check, a1, a2, a3, a4, a5, a6);
+    }
+}
+
+void
+sys_set_syscall_mechanism(int mech) {
+    jos_syscall_mechanism = mech;
+}
+
+int 
+sys_get_syscall_mechanism(void) {
+    return jos_syscall_mechanism;
+}
+
+int
+sys_nop(void) {
+    return (int)jos_syscall(SYS_nop, 0, 0,0,0,0,0,0);
+}
+
 void
 sys_cputs(const char *s, size_t len) {
     //syscall(SYS_cputs, 0, (uintptr_t)s, len, 0, 0, 0, 0);
