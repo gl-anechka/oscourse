@@ -118,13 +118,23 @@ int vsys_gettime(void);
 /* This must be inlined. Exercise for reader: why? */
 static inline envid_t __attribute__((always_inline))
 sys_exofork(void) {
-    /*envid_t ret;
-    asm volatile("int %2"
-                 : "=a"(ret)
-                 : "a"(SYS_exofork), "i"(T_SYSCALL));*/
     // itask
-    int64_t ret = jos_syscall(SYS_exofork, 0, 0, 0, 0, 0, 0, 0);
-    if (ret < 0) panic("sys_exofork: %ld", ret);
+    envid_t ret;
+
+    if (jos_syscall_mechanism == JOS_SYSCALL_MECH_SYSCALL) {
+        asm volatile("syscall"
+                     : "=a"(ret)
+                     : "a"(SYS_exofork)
+                     : "rcx", "r11", "cc", "memory");
+    } else {
+        asm volatile("int %2"
+                    : "=a"(ret)
+                    : "a"(SYS_exofork), "i"(T_SYSCALL));
+    }
+
+    if (ret < 0)
+        panic("sys_exofork: %d", (int)ret);
+
     return ret;
 }
 

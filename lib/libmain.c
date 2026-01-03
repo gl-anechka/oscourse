@@ -13,6 +13,16 @@ const char *binaryname = "<unknown>";
 void (*volatile sys_exit)(void);
 #endif
 
+static void
+asan_unpoison_inherited_fdtable(void) {
+    for (int i = 0; i < 32; i++) {
+        void *va = (void *)(0xD0000000LL + (uintptr_t)i * PAGE_SIZE);
+        if (sys_region_refs(va, PAGE_SIZE) > 0) {
+            platform_asan_unpoison(va, PAGE_SIZE);
+        }
+    }
+}
+
 void
 libmain(int argc, char **argv) {
     /* Perform global constructor initialisation (e.g. asan)
@@ -25,6 +35,10 @@ libmain(int argc, char **argv) {
 
     // LAB 8: Your code here
     thisenv = &envs[ENVX(sys_getenvid())];
+
+    #ifdef SANITIZE_USER_SHADOW_BASE
+        asan_unpoison_inherited_fdtable();
+    #endif
 
     /* Save the name of the program so that panic() can use it */
     if (argc > 0) binaryname = argv[0];

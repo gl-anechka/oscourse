@@ -6,7 +6,8 @@
 
 
 // itask
-int jos_syscall_mechanism = JOS_SYSCALL_MECH_SYSCALL;
+//int jos_syscall_mechanism = JOS_SYSCALL_MECH_SYSCALL;
+int jos_syscall_mechanism = JOS_SYSCALL_MECH_INT;
 
 /* Syscall/sysret */
 static inline int64_t __attribute__((always_inline))

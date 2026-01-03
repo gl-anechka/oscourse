@@ -75,6 +75,15 @@ acpi_enable(void) {
         ;
 }
 
+static uint8_t
+acpi_checksum(const void *p, size_t len) {
+    const uint8_t *b = (const uint8_t *)p;
+    uint32_t sum = 0;
+    for (size_t i = 0; i < len; i++)
+        sum += b[i];
+    return (uint8_t)sum;
+}
+
 static void *
 acpi_find_table(const char *sign) {
     /*
@@ -90,76 +99,73 @@ acpi_find_table(const char *sign) {
      * HINT: You may want to distunguish RSDT/XSDT
      */
     // LAB 5: Your code here:
-    static bool isXSDT = 0;
-    static RSDT *rsdt = 0;
+    static bool inited = false;
+    static bool is_xsdt = false;
+    static ACPISDTHeader *sdt = NULL;
 
-    if (!rsdt) {
-        RSDP *rsdp = mmio_map_region(uefi_lp->ACPIRoot, sizeof(*rsdp));
+    if (!inited) {
+        physaddr_t rsdp_pa = (physaddr_t)uefi_lp->ACPIRoot;
+        RSDP *rsdp = (RSDP *)mmio_map_region(rsdp_pa, sizeof(RSDP));
 
-        if (strncmp(rsdp->Signature, "RSD PTR ", 8))
-            panic("RSDP malformed");
+        if (strncmp(rsdp->Signature, "RSD PTR ", 8) != 0)
+            panic("RSDP malformed: bad signature");
 
-        physaddr_t rsdt_phys;
-        if (rsdp->Revision) {
-            /* ACPI 2.0+ */
-            uint8_t checksum = 0;
-            uint8_t *iter;
-            for (iter = (uint8_t *)rsdp; iter < ((uint8_t *)rsdp + sizeof(*rsdp)); ++iter)
-                checksum += *iter;
+        if (acpi_checksum(rsdp, 20) != 0)
+            panic("RSDP malformed: checksum1");
 
-            if (checksum)
-                panic("RSDP malformed");
+        physaddr_t sdt_pa = 0;
 
-            for (iter = (uint8_t *)rsdp; iter < ((uint8_t *)rsdp + sizeof(*rsdp)); ++iter)
-                checksum += *iter;
+        if (rsdp->Revision != 0) {
+            if (rsdp->Length < 20)
+                panic("RSDP malformed: length");
+            rsdp = (RSDP *)mmio_remap_last_region(rsdp_pa, rsdp, sizeof(RSDP), rsdp->Length);
 
-            if (checksum)
-                panic("RSDP malformed");
+            if (acpi_checksum(rsdp, rsdp->Length) != 0)
+                panic("RSDP malformed: checksum2");
 
-            rsdt_phys = rsdp->XsdtAddress;
-            isXSDT = 1;
+            sdt_pa = (physaddr_t)rsdp->XsdtAddress;
+            is_xsdt = true;
         } else {
-            /* ACPI 1.0 */
-            uint8_t checksum = 0;
-            uint8_t *iter;
-
-            for (iter = (uint8_t *)rsdp; iter < (uint8_t *)(rsdp + sizeof(*rsdp)); ++iter)
-                checksum += *iter;
-
-            if (checksum)
-                panic("RSDP malformed");
-
-            rsdt_phys = rsdp->RsdtAddress;
+            sdt_pa = (physaddr_t)rsdp->RsdtAddress;
+            is_xsdt = false;
         }
 
-        rsdt = mmio_map_region(rsdt_phys, sizeof(RSDT));
-        rsdt = (RSDT *)mmio_remap_last_region(rsdt_phys, (void *)rsdt, sizeof(RSDT), rsdt->h.Length);
+        sdt = (ACPISDTHeader *)mmio_map_region(sdt_pa, sizeof(ACPISDTHeader));
+        sdt = (ACPISDTHeader *)mmio_remap_last_region(sdt_pa, sdt, sizeof(ACPISDTHeader), sdt->Length);
 
-        /* Validate header checksum */
-        uint8_t checksum = 0;
+        if (acpi_checksum(sdt, sdt->Length) != 0)
+            panic("RSDT/XSDT malformed: checksum");
 
-        for (int i = 0; i < rsdt->h.Length; ++i)
-            checksum += ((uint8_t *) &rsdt->h)[i];
-        if (checksum)
-            panic("Malformed RSDT header");
+        inited = true;
     }
 
-    uint32_t *other_rsdts = rsdt->PointerToOtherSDT;
-    size_t entries_cnt = (rsdt->h.Length - sizeof(ACPISDTHeader)) / (isXSDT ? 8 : 4);
-    for (size_t i = 0; i < entries_cnt; i++) {
-        physaddr_t header_physical = 0;
-        if (!isXSDT) {
-            header_physical = other_rsdts[i];
+    uint8_t *ents = (uint8_t *)((uint8_t *)sdt + sizeof(ACPISDTHeader));
+    size_t step = is_xsdt ? 8 : 4;
+    size_t n = (sdt->Length - sizeof(ACPISDTHeader)) / step;
+
+    for (size_t i = 0; i < n; i++) {
+        physaddr_t tbl_pa = 0;
+
+        if (!is_xsdt) {
+            uint32_t e;
+            memcpy(&e, ents + i * 4, 4);
+            tbl_pa = (physaddr_t)e;
         } else {
-            header_physical = ((int64_t *)(void *)other_rsdts)[i];
+            uint64_t e;
+            memcpy(&e, ents + i * 8, 8);
+            tbl_pa = (physaddr_t)e;
         }
-        if (!header_physical)
+
+        if (!tbl_pa)
             continue;
-        ACPISDTHeader *header = mmio_map_region(header_physical, sizeof(ACPISDTHeader));
-        /* Remap using actual size */
-        header = (ACPISDTHeader *)mmio_remap_last_region(header_physical, header, sizeof(ACPISDTHeader), header->Length);
-        if (!strncmp(header->Signature, sign, 4)){
-            return header;
+
+        ACPISDTHeader *h = (ACPISDTHeader *)mmio_map_region(tbl_pa, sizeof(ACPISDTHeader));
+        h = (ACPISDTHeader *)mmio_remap_last_region(tbl_pa, h, sizeof(ACPISDTHeader), h->Length);
+
+        if (strncmp(h->Signature, sign, 4) == 0) {
+            if (acpi_checksum(h, h->Length) != 0)
+                panic("ACPI table %.4s malformed: checksum", sign);
+            return h;
         }
     }
 
