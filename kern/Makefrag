@@ -25,9 +25,11 @@ KERN_SRCFILES := kern/bootstrap.S \
 			kern/printf.c \
 			kern/trap.c \
 			kern/trapentry.S \
+			kern/syscallentry.S \
 			kern/timer.c \
 			kern/sched.c \
 			kern/syscall.c \
+			kern/syscall_fast.c \
 			kern/kdebug.c \
 			lib/printfmt.c \
 			lib/readline.c \

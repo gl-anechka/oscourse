@@ -186,6 +186,11 @@ wrmsr(uint32_t msr, uint64_t val) {
     asm volatile("rdmsr"
                  : "=a"(rax), "=d"(rdx)
                  : "c"(msr));
+    // itask
+    asm volatile("wrmsr"
+                 :
+                 : "c"(msr), "a"(rax), "d"(rdx)
+                 : "memory");
 }
 
 static inline void __attribute__((always_inline))

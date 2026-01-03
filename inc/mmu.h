@@ -141,9 +141,17 @@
 
 /* x86_64 related changes */
 #define EFER_MSR 0xC0000080
+// itask
+#define EFER_SCE (1ULL << 0)  /* SYSCALL/SYSRET enable */
 #define EFER_LME (1ULL << 8)
 #define EFER_LMA (1ULL << 10)
 #define EFER_NXE (1ULL << 11)
+
+// itask
+/* MSRs used by SYSCALL/SYSRET. */
+#define MSR_STAR  0xC0000081
+#define MSR_LSTAR 0xC0000082
+#define MSR_FMASK 0xC0000084
 
 /* RFLAGS register */
 #define FL_CF        0x00000001 /* Carry Flag */

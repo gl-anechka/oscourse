@@ -4,6 +4,7 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inc/memlayout.h>
 
 #include <kern/console.h>
 #include <kern/env.h>
@@ -520,6 +521,12 @@ sys_gettime(void) {
     return gettime();
 }
 
+// itask
+static int
+sys_nop(void) {
+    return 0;
+}
+
 /*
  * This function return the difference between maximal
  * number of references of regions [addr, addr + size] and [addr2,addr2+size2]
@@ -586,6 +593,9 @@ syscall(uintptr_t syscallno, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t
         return sys_ipc_recv((uintptr_t)a1, (uintptr_t)a2);
     case SYS_gettime:
         return sys_gettime();
+    // itask
+    case SYS_nop:
+        return sys_nop();
     default:
         return -E_NO_SYS;
     }

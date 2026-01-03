@@ -21,6 +21,12 @@
 #define GD_UD   0x30 /* user data */
 #define GD_TSS0 0x38 /* Task segment selector for CPU 0 */
 
+// itask
+#define GD_SYSRET_BASE 0x48 /* STAR[63:48] value */
+#define GD_UD_SYSRET   0x50 /* user data (SYSRET SS) */
+#define GD_UT_SYSRET   0x58 /* user text (SYSRET CS) */
+
+
 /*
  * Virtual memory map:                                Permissions
  *                                                    kernel/user
