@@ -1,5 +1,5 @@
 // itask
-/* Check syscall correctness */
+/* Check syscall correctness (teacher-style markers) */
 
 #include <inc/lib.h>
 #include <inc/memlayout.h>
@@ -28,7 +28,8 @@ test_basic_invariants(void) {
     tassert(me == me2, "getenvid not stable");
 
     int m = sys_get_syscall_mechanism();
-    tassert(m == JOS_SYSCALL_MECH_INT || m == JOS_SYSCALL_MECH_SYSCALL, "bad mechanism value");
+    tassert(m == JOS_SYSCALL_MECH_INT || m == JOS_SYSCALL_MECH_SYSCALL,
+            "bad mechanism value");
 
     int64_t t0 = sys_gettime();
     for (volatile int i = 0; i < 100000; i++) ;
@@ -71,24 +72,28 @@ test_map_region_6args(void) {
     memset(src, 0x5A, PAGE_SIZE);
     uint32_t want = checksum32(src, PAGE_SIZE);
 
-    envid_t child = sys_exofork();
-    tassert(child > 0, "exofork failed");
+    envid_t parent = sys_getenvid();
+    envid_t child = fork();
+    tassert(child >= 0, "fork failed");
 
     if (child == 0) {
-        envid_t from = 0;
-        (void)ipc_recv(&from, NULL, NULL, NULL);
+        thisenv = &envs[ENVX(sys_getenvid())];
+
+        (void)ipc_recv(NULL, NULL, NULL, NULL);
+
+        #ifdef SANITIZE_USER_SHADOW_BASE
+            platform_asan_unpoison(dst, PAGE_SIZE);
+        #endif
 
         uint32_t got = checksum32(dst, PAGE_SIZE);
+        ipc_send(parent, got, NULL, 0, 0);
 
-        ipc_send(thisenv->env_parent_id, got, NULL, 0, 0);
+        exit();
         return;
     }
 
     r = sys_map_region(0, src, child, dst, PAGE_SIZE, PROT_R);
     tassert(r == 0, "map_region failed (arg mapping/reg layout bug?)");
-
-    r = sys_env_set_status(child, ENV_RUNNABLE);
-    tassert(r == 0, "env_set_status(child) failed");
 
     ipc_send(child, 0x1234, NULL, 0, 0);
 
@@ -100,14 +105,22 @@ test_map_region_6args(void) {
 }
 
 static void
-run_suite_for_mech(int mech) {
+run_suite_for_mech(int mech, const char *tag) {
     sys_set_syscall_mechanism(mech);
     tassert(sys_get_syscall_mechanism() == mech, "mechanism switch not applied");
+    cprintf("%s mechanism switch is good\n", tag);
 
     test_basic_invariants();
+    cprintf("%s basic invariants is good\n", tag);
+
     test_error_paths();
+    cprintf("%s error paths is good\n", tag);
+
     test_alloc_unmap_rw();
+    cprintf("%s alloc/unmap is good\n", tag);
+
     test_map_region_6args();
+    cprintf("%s map_region(6 args) is good\n", tag);
 }
 
 void
@@ -115,11 +128,8 @@ umain(int argc, char **argv) {
     (void)argc; (void)argv;
     cprintf("=== itask: syscall correctness ===\n");
 
-    cprintf("[1/2] INT mechanism...\n");
-    run_suite_for_mech(JOS_SYSCALL_MECH_INT);
+    run_suite_for_mech(JOS_SYSCALL_MECH_INT, "INT");
+    run_suite_for_mech(JOS_SYSCALL_MECH_SYSCALL, "SYSCALL");
 
-    cprintf("[2/2] SYSCALL/SYSRET mechanism...\n");
-    run_suite_for_mech(JOS_SYSCALL_MECH_SYSCALL);
-
-    cprintf("ALL TESTS PASSED\n");
+    cprintf("itaskcorrect is good\n");
 }

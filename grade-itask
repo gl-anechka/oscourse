@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from gradelib import *
+
+# itask
+
+r = Runner(save("jos.out"),
+           stop_breakpoint("cons_getc"))
+
+def matchtest(parent, name, *args, **kw):
+    def do_test():
+        r.match(*args, **kw)
+    test(2, name, parent=parent)(do_test)
+
+@test(4, "itaskcorrect")
+def test_itask():
+    r.user_test("itaskcorrect", snapshot=False)
+
+matchtest(test_itask, "INT suite",
+          r".*INT mechanism switch is good",
+          r".*INT basic invariants is good",
+          r".*INT error paths is good",
+          r".*INT alloc/unmap is good",
+          r".*INT map_region\(6 args\) is good")
+
+matchtest(test_itask, "SYSCALL suite",
+          r".*SYSCALL mechanism switch is good",
+          r".*SYSCALL basic invariants is good",
+          r".*SYSCALL error paths is good",
+          r".*SYSCALL alloc/unmap is good",
+          r".*SYSCALL map_region\(6 args\) is good")
+
+matchtest(test_itask, "final marker",
+          r".*itaskcorrect is good")
+
+run_tests()

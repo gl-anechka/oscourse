@@ -104,8 +104,9 @@ bench_map_unmap_1pg(int mech, int iters, envid_t child, void *src, void *dst) {
 
 static void
 print_row(const char *name, uint64_t c_int, uint64_t c_sys, int iters_note) {
-    cprintf("  %-22s INT:%6lu  SYSCALL:%6lu  diff:%+ld  (iters=%d)\n",
-            name, c_int, c_sys, (int64_t)c_sys - (int64_t)c_int, iters_note);
+    int diff = (int)(c_int - c_sys);
+    cprintf("  %-22s INT:%6lu  SYSCALL:%6lu  diff:%d  (iters=%d)\n",
+            name, c_int, c_sys, diff, iters_note);
 }
 
 void
