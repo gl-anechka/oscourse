@@ -20,6 +20,8 @@ enum {
     SYS_ipc_try_send,
     SYS_ipc_recv,
     SYS_gettime,
+    // itask
+    SYS_nop,
     NSYSCALLS
 };
 

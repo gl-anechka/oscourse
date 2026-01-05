@@ -16,6 +16,7 @@
 #include <kern/timer.h>
 #include <kern/vsyscall.h>
 #include <kern/traceopt.h>
+#include <kern/syscall_fast.h>
 
 static struct Taskstate ts;
 
@@ -43,7 +44,7 @@ struct Pseudodesc idt_pd = {sizeof(idt) - 1, (uint64_t)idt};
  * In particular, the last argument to the SEG macro used in the
  * definition of gdt specifies the Descriptor Privilege Level (DPL)
  * of that descriptor: 0 for kernel and 3 for user. */
-struct Segdesc32 gdt[2 * NCPU + 7] = {
+struct Segdesc32 gdt[2 * NCPU + 11] = {
         /* 0x0 - unused (always faults -- for trapping NULL far pointers) */
         SEG_NULL,
         /* 0x8 - kernel code segment */
@@ -58,6 +59,12 @@ struct Segdesc32 gdt[2 * NCPU + 7] = {
         [GD_UT >> 3] = SEG64(STA_X | STA_R, 0x0, 0xFFFFFFFF, 3),
         /* 0x30 - user data segment */
         [GD_UD >> 3] = SEG64(STA_W, 0x0, 0xFFFFFFFF, 3),
+
+        // itask
+        [GD_SYSRET_BASE >> 3] = SEG_NULL,
+        [GD_UD_SYSRET >> 3]   = SEG64(STA_W, 0x0, 0xFFFFFFFF, 3),
+        [GD_UT_SYSRET >> 3]   = SEG64(STA_X | STA_R, 0x0, 0xFFFFFFFF, 3),
+
         /* Per-CPU TSS descriptors (starting from GD_TSS0) are initialized
          * in trap_init_percpu() */
         [GD_TSS0 >> 3] = SEG_NULL,
@@ -210,6 +217,10 @@ trap_init_percpu(void) {
 
     /* Load the IDT */
     lidt(&idt_pd);
+
+    // itask
+    /* Enable and configure SYSCALL/SYSRET fast system call mechanism. */
+    syscall_fast_init();
 }
 
 void
