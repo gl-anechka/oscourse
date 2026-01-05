@@ -2,6 +2,37 @@
 
 #include <inc/syscall.h>
 #include <inc/lib.h>
+#include <inc/memlayout.h>
+
+
+// itask
+//int jos_syscall_mechanism = JOS_SYSCALL_MECH_SYSCALL;
+int jos_syscall_mechanism = JOS_SYSCALL_MECH_INT;
+
+/* Syscall/sysret */
+static inline int64_t __attribute__((always_inline))
+raw_syscall_sysret(uintptr_t num, bool check,
+                   uintptr_t a1, uintptr_t a2, uintptr_t a3,
+                   uintptr_t a4, uintptr_t a5, uintptr_t a6) {
+    intptr_t ret;
+    register uintptr_t _a0 asm("rax") = num;
+    register uintptr_t _a1 asm("rdx") = a1;
+    register uintptr_t _a2 asm("r10") = a2; /* RCX clobbered by SYSCALL */
+    register uintptr_t _a3 asm("rbx") = a3;
+    register uintptr_t _a4 asm("rdi") = a4;
+    register uintptr_t _a5 asm("rsi") = a5;
+    register uintptr_t _a6 asm("r8")  = a6;
+
+    asm volatile("syscall\n"
+                 : "=a"(ret)
+                 : "r"(_a0), "r"(_a1), "r"(_a2), "r"(_a3), "r"(_a4), "r"(_a5), "r"(_a6)
+                 : "rcx", "r11", "cc", "memory");
+
+    if (check && ret > 0)
+        panic("syscall %zd returned %zd (>0)", num, ret);
+    return ret;
+}
+
 
 static inline int64_t __attribute__((always_inline))
 syscall(uintptr_t num, bool check, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6) {
@@ -41,44 +72,82 @@ syscall(uintptr_t num, bool check, uintptr_t a1, uintptr_t a2, uintptr_t a3, uin
     return ret;
 }
 
+// itask
+/* Mechanism selector */
+int64_t
+jos_syscall(uintptr_t num, bool check,
+            uintptr_t a1, uintptr_t a2, uintptr_t a3,
+            uintptr_t a4, uintptr_t a5, uintptr_t a6) {
+    switch (jos_syscall_mechanism) {
+        case JOS_SYSCALL_MECH_SYSCALL:
+            return raw_syscall_sysret(num, check, a1, a2, a3, a4, a5, a6);
+        case JOS_SYSCALL_MECH_INT:
+        default:
+            return syscall(num, check, a1, a2, a3, a4, a5, a6);
+    }
+}
+
+void
+sys_set_syscall_mechanism(int mech) {
+    jos_syscall_mechanism = mech;
+}
+
+int 
+sys_get_syscall_mechanism(void) {
+    return jos_syscall_mechanism;
+}
+
+int
+sys_nop(void) {
+    return (int)jos_syscall(SYS_nop, 0, 0,0,0,0,0,0);
+}
+
 void
 sys_cputs(const char *s, size_t len) {
-    syscall(SYS_cputs, 0, (uintptr_t)s, len, 0, 0, 0, 0);
+    //syscall(SYS_cputs, 0, (uintptr_t)s, len, 0, 0, 0, 0);
+    jos_syscall(SYS_cputs, 0, (uintptr_t)s, len, 0, 0, 0, 0);
 }
 
 int
 sys_cgetc(void) {
-    return syscall(SYS_cgetc, 0, 0, 0, 0, 0, 0, 0);
+    //return syscall(SYS_cgetc, 0, 0, 0, 0, 0, 0, 0);
+    return jos_syscall(SYS_cgetc, 0, 0, 0, 0, 0, 0, 0);
 }
 
 int
 sys_env_destroy(envid_t envid) {
-    return syscall(SYS_env_destroy, 1, envid, 0, 0, 0, 0, 0);
+    //return syscall(SYS_env_destroy, 1, envid, 0, 0, 0, 0, 0);
+    return jos_syscall(SYS_env_destroy, 1, envid, 0, 0, 0, 0, 0);
 }
 
 envid_t
 sys_getenvid(void) {
-    return syscall(SYS_getenvid, 0, 0, 0, 0, 0, 0, 0);
+    //return syscall(SYS_getenvid, 0, 0, 0, 0, 0, 0, 0);
+    return jos_syscall(SYS_getenvid, 0, 0, 0, 0, 0, 0, 0);
 }
 
 void
 sys_yield(void) {
-    syscall(SYS_yield, 0, 0, 0, 0, 0, 0, 0);
+    //syscall(SYS_yield, 0, 0, 0, 0, 0, 0, 0);
+    jos_syscall(SYS_yield, 0, 0, 0, 0, 0, 0, 0);
 }
 
 int
 sys_region_refs(void *va, size_t size) {
-    return syscall(SYS_region_refs, 0, (uintptr_t)va, size, MAX_USER_ADDRESS, 0, 0, 0);
+    //return syscall(SYS_region_refs, 0, (uintptr_t)va, size, MAX_USER_ADDRESS, 0, 0, 0);
+    return jos_syscall(SYS_region_refs, 0, (uintptr_t)va, size, MAX_USER_ADDRESS, 0, 0, 0);
 }
 
 int
 sys_region_refs2(void *va, size_t size, void *va2, size_t size2) {
-    return syscall(SYS_region_refs, 0, (uintptr_t)va, size, (uintptr_t)va2, size2, 0, 0);
+    //return syscall(SYS_region_refs, 0, (uintptr_t)va, size, (uintptr_t)va2, size2, 0, 0);
+    return jos_syscall(SYS_region_refs, 0, (uintptr_t)va, size, (uintptr_t)va2, size2, 0, 0);
 }
 
 int
 sys_alloc_region(envid_t envid, void *va, size_t size, int perm) {
-    int res = syscall(SYS_alloc_region, 1, envid, (uintptr_t)va, size, perm, 0, 0);
+    //int res = syscall(SYS_alloc_region, 1, envid, (uintptr_t)va, size, perm, 0, 0);
+    int res = jos_syscall(SYS_alloc_region, 1, envid, (uintptr_t)va, size, perm, 0, 0);
 #ifdef SANITIZE_USER_SHADOW_BASE
     /* Unpoison the allocated page */
     if (!res && thisenv && envid == CURENVID && ((uintptr_t)va < SANITIZE_USER_SHADOW_BASE || (uintptr_t)va >= SANITIZE_USER_SHADOW_SIZE + SANITIZE_USER_SHADOW_BASE)) {
@@ -91,7 +160,8 @@ sys_alloc_region(envid_t envid, void *va, size_t size, int perm) {
 
 int
 sys_map_region(envid_t srcenv, void *srcva, envid_t dstenv, void *dstva, size_t size, int perm) {
-    int res = syscall(SYS_map_region, 1, srcenv, (uintptr_t)srcva, dstenv, (uintptr_t)dstva, size, perm);
+    //int res = syscall(SYS_map_region, 1, srcenv, (uintptr_t)srcva, dstenv, (uintptr_t)dstva, size, perm);
+    int res = jos_syscall(SYS_map_region, 1, srcenv, (uintptr_t)srcva, dstenv, (uintptr_t)dstva, size, perm);
 #ifdef SANITIZE_USER_SHADOW_BASE
     if (!res && dstenv == CURENVID)
         platform_asan_unpoison(dstva, size);
@@ -101,7 +171,8 @@ sys_map_region(envid_t srcenv, void *srcva, envid_t dstenv, void *dstva, size_t 
 
 int
 sys_map_physical_region(uintptr_t pa, envid_t dstenv, void *dstva, size_t size, int perm) {
-    int res = syscall(SYS_map_physical_region, 1, pa, dstenv, (uintptr_t)dstva, size, perm, 0);
+    //int res = syscall(SYS_map_physical_region, 1, pa, dstenv, (uintptr_t)dstva, size, perm, 0);
+    int res = jos_syscall(SYS_map_physical_region, 1, pa, dstenv, (uintptr_t)dstva, size, perm, 0);
 #ifdef SANITIZE_USER_SHADOW_BASE
     platform_asan_unpoison(dstva, size);
 #endif
@@ -110,7 +181,8 @@ sys_map_physical_region(uintptr_t pa, envid_t dstenv, void *dstva, size_t size, 
 
 int
 sys_unmap_region(envid_t envid, void *va, size_t size) {
-    int res = syscall(SYS_unmap_region, 1, envid, (uintptr_t)va, size, 0, 0, 0);
+    //int res = syscall(SYS_unmap_region, 1, envid, (uintptr_t)va, size, 0, 0, 0);
+    int res = jos_syscall(SYS_unmap_region, 1, envid, (uintptr_t)va, size, 0, 0, 0);
 #ifdef SANITIZE_USER_SHADOW_BASE
     if (!res && ((uintptr_t)va < SANITIZE_USER_SHADOW_BASE ||
                  (uintptr_t)va >= SANITIZE_USER_SHADOW_SIZE + SANITIZE_USER_SHADOW_BASE)) {
@@ -124,27 +196,32 @@ sys_unmap_region(envid_t envid, void *va, size_t size) {
 
 int
 sys_env_set_status(envid_t envid, int status) {
-    return syscall(SYS_env_set_status, 1, envid, status, 0, 0, 0, 0);
+    //return syscall(SYS_env_set_status, 1, envid, status, 0, 0, 0, 0);
+    return jos_syscall(SYS_env_set_status, 1, envid, status, 0, 0, 0, 0);
 }
 
 int
 sys_env_set_trapframe(envid_t envid, struct Trapframe *tf) {
-    return syscall(SYS_env_set_trapframe, 1, envid, (uintptr_t)tf, 0, 0, 0, 0);
+    //return syscall(SYS_env_set_trapframe, 1, envid, (uintptr_t)tf, 0, 0, 0, 0);
+    return jos_syscall(SYS_env_set_trapframe, 1, envid, (uintptr_t)tf, 0, 0, 0, 0);
 }
 
 int
 sys_env_set_pgfault_upcall(envid_t envid, void *upcall) {
-    return syscall(SYS_env_set_pgfault_upcall, 1, envid, (uintptr_t)upcall, 0, 0, 0, 0);
+    //return syscall(SYS_env_set_pgfault_upcall, 1, envid, (uintptr_t)upcall, 0, 0, 0, 0);
+    return jos_syscall(SYS_env_set_pgfault_upcall, 1, envid, (uintptr_t)upcall, 0, 0, 0, 0);
 }
 
 int
 sys_ipc_try_send(envid_t envid, uintptr_t value, void *srcva, size_t size, int perm) {
-    return syscall(SYS_ipc_try_send, 0, envid, value, (uintptr_t)srcva, size, perm, 0);
+    //return syscall(SYS_ipc_try_send, 0, envid, value, (uintptr_t)srcva, size, perm, 0);
+    return jos_syscall(SYS_ipc_try_send, 0, envid, value, (uintptr_t)srcva, size, perm, 0);
 }
 
 int
 sys_ipc_recv(void *dstva, size_t size) {
-    int res = syscall(SYS_ipc_recv, 1, (uintptr_t)dstva, size, 0, 0, 0, 0);
+    //int res = syscall(SYS_ipc_recv, 1, (uintptr_t)dstva, size, 0, 0, 0, 0);
+    int res = jos_syscall(SYS_ipc_recv, 1, (uintptr_t)dstva, size, 0, 0, 0, 0);
 #ifdef SANITIZE_USER_SHADOW_BASE
     if (!res) platform_asan_unpoison(dstva, thisenv->env_ipc_maxsz);
 #endif
@@ -153,5 +230,6 @@ sys_ipc_recv(void *dstva, size_t size) {
 
 int
 sys_gettime(void) {
-    return syscall(SYS_gettime, 0, 0, 0, 0, 0, 0, 0);
+    //return syscall(SYS_gettime, 0, 0, 0, 0, 0, 0, 0);
+    return jos_syscall(SYS_gettime, 0, 0, 0, 0, 0, 0, 0);
 }
