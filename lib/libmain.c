@@ -13,6 +13,7 @@ const char *binaryname = "<unknown>";
 void (*volatile sys_exit)(void);
 #endif
 
+#ifdef SANITIZE_USER_SHADOW_BASE
 static void
 asan_unpoison_inherited_fdtable(void) {
     for (int i = 0; i < 32; i++) {
@@ -22,6 +23,7 @@ asan_unpoison_inherited_fdtable(void) {
         }
     }
 }
+#endif
 
 void
 libmain(int argc, char **argv) {
