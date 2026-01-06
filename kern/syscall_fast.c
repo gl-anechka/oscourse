@@ -15,12 +15,6 @@
 extern void syscall_entry(void);
 
 static inline int
-is_user_canonical(uint64_t va) {
-    if (va >= MAX_USER_ADDRESS) return 0;
-    return (va >> 48) == 0;
-}
-
-static inline int
 syscall_needs_trapframe(uint64_t sysno) {
     return (sysno == SYS_yield) || (sysno == SYS_ipc_recv) || (sysno == SYS_exofork);
 }
@@ -61,7 +55,7 @@ syscall_fast_init(void) {
     if (!(efer & EFER_SCE))
         wrmsr(EFER_MSR, efer | EFER_SCE);
 
-    const uint64_t star = ((uint64_t)GD_SYSRET_BASE << 48) | ((uint64_t)GD_KT << 32);
+    const uint64_t star = (((uint64_t)GD_SYSRET_BASE | 3) << 48) | ((uint64_t)GD_KT << 32);
     wrmsr(MSR_STAR, star);
     wrmsr(MSR_LSTAR, (uint64_t)(uintptr_t)syscall_entry);
     wrmsr(MSR_FMASK, (uint64_t)(FL_IF | FL_DF | FL_TF));
@@ -69,13 +63,6 @@ syscall_fast_init(void) {
 
 uint64_t
 syscall_fast_handler(struct SyscallFastFrame *f) {
-    if (!is_user_canonical(f->user_rip) || !is_user_canonical(f->user_rsp)) {
-        cprintf("[syscall] bad return state rip=%016lx rsp=%016lx\n",
-                (unsigned long)f->user_rip, (unsigned long)f->user_rsp);
-        env_destroy(curenv);
-        sched_yield();
-    }
-
     if (syscall_needs_trapframe(f->rax)) {
         fastframe_to_trapframe(f, &curenv->env_tf);
     }
