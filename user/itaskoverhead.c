@@ -16,6 +16,16 @@ rdtsc_serial(void) {
 }
 
 static uint64_t
+bench_empty(int iters) {
+    uint64_t t0 = rdtsc_serial();
+    for (int i = 0; i < iters; i++) {
+        asm volatile("" ::: "memory");
+    }
+    uint64_t t1 = rdtsc_serial();
+    return (t1 - t0) / (uint64_t)iters;
+}
+
+static uint64_t
 bench_nop(int mech, int iters) {
     sys_set_syscall_mechanism(mech);
     volatile int sink = 0;
@@ -117,6 +127,9 @@ umain(int argc, char **argv) {
     const int it_fast = 200000;
     const int it_slow = 5000;
 
+    uint64_t empty_fast = bench_empty(it_fast);
+    uint64_t empty_slow = bench_empty(it_slow);
+
     sys_set_syscall_mechanism(JOS_SYSCALL_MECH_INT);
     for (int i = 0; i < 2000; i++) sys_nop();
     sys_set_syscall_mechanism(JOS_SYSCALL_MECH_SYSCALL);
@@ -152,6 +165,14 @@ umain(int argc, char **argv) {
 
     uint64_t mu_i  = bench_map_unmap_1pg(JOS_SYSCALL_MECH_INT, it_slow, child, src, dst);
     uint64_t mu_s  = bench_map_unmap_1pg(JOS_SYSCALL_MECH_SYSCALL, it_slow, child, src, dst);
+
+    nop_i = nop_i - empty_fast; nop_s = nop_s - empty_fast;
+    ge_i  = ge_i - empty_fast; ge_s  = ge_s - empty_fast;
+    gt_i  = gt_i - empty_fast; gt_s  = gt_s - empty_fast;
+    cp_i  = cp_i - empty_fast; cp_s  = cp_s - empty_fast;
+    ed_i  = ed_i - empty_fast; ed_s  = ed_s - empty_fast;
+    au_i  = au_i - empty_slow; au_s  = au_s - empty_slow;
+    mu_i  = mu_i - empty_slow; mu_s  = mu_s - empty_slow;
 
     cprintf("\ncycles/op (avg):\n");
     print_row("SYS_nop",              nop_i, nop_s, it_fast);
